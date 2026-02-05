@@ -87,8 +87,8 @@ struct EntryLibraryRow: View {
                 
                 Spacer()
                 
-                if let mood = entry.mood {
-                    Text(moodEmoji(for: mood))
+                if let emoji = entry.moodEmoji {
+                    Text(emoji)
                         .font(.caption)
                 }
                 
@@ -121,17 +121,6 @@ struct EntryLibraryRow: View {
             }
         }
         .padding(.vertical, 4)
-    }
-    
-    private func moodEmoji(for mood: String) -> String {
-        switch mood.lowercased() {
-        case "happy": return "😊"
-        case "calm": return "😌"
-        case "sad": return "😔"
-        case "frustrated": return "😤"
-        case "thoughtful": return "🤔"
-        default: return "😐"
-        }
     }
 }
 

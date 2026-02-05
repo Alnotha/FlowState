@@ -30,8 +30,8 @@ struct JournalEditorView: View {
                     
                     // Mood selector
                     VStack(spacing: 4) {
-                        if let mood = entry.mood {
-                            Text(moodEmoji(for: mood))
+                        if let emoji = entry.moodEmoji {
+                            Text(emoji)
                                 .font(.title2)
                         } else {
                             Image(systemName: "face.smiling")
@@ -187,17 +187,6 @@ struct JournalEditorView: View {
             entry.photoData = nil
         }
     }
-    
-    private func moodEmoji(for mood: String) -> String {
-        switch mood.lowercased() {
-        case "happy": return "😊"
-        case "calm": return "😌"
-        case "sad": return "😔"
-        case "frustrated": return "😤"
-        case "thoughtful": return "🤔"
-        default: return "😐"
-        }
-    }
 }
 
 // MARK: - Stat Item
@@ -217,20 +206,3 @@ struct StatItem: View {
         .frame(maxWidth: .infinity)
     }
 }
-
-// Comment out preview temporarily if it's causing issues
-// You can test by running the app directly instead
-
-/*
-#Preview {
-    let config = ModelConfiguration(isStoredInMemoryOnly: true)
-    let container = try! ModelContainer(for: JournalEntry.self, configurations: config)
-    let entry = JournalEntry(content: "Today was a great day!")
-    container.mainContext.insert(entry)
-    
-    return NavigationStack {
-        JournalEditorView(entry: entry)
-            .modelContainer(container)
-    }
-}
-*/

@@ -7,7 +7,6 @@
 
 import Foundation
 import SwiftData
-import SwiftUI
 
 @Model
 final class JournalEntry {
@@ -43,5 +42,18 @@ final class JournalEntry {
     // Update word count when content changes
     func updateWordCount() {
         wordCount = content.isEmpty ? 0 : content.split(separator: " ").count
+    }
+
+    // Emoji representation of the mood
+    var moodEmoji: String? {
+        guard let mood = mood else { return nil }
+        switch mood.lowercased() {
+        case "happy": return "😊"
+        case "calm": return "😌"
+        case "sad": return "😔"
+        case "frustrated": return "😤"
+        case "thoughtful": return "🤔"
+        default: return "😐"
+        }
     }
 }
