@@ -12,27 +12,12 @@ struct HomeView: View {
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \JournalEntry.date, order: .reverse) private var entries: [JournalEntry]
     @State private var showingEditor = false
-    
-    // Get today's entry if it exists
+    @State private var showingSettings = false
+
     private var todayEntry: JournalEntry? {
         entries.first { Calendar.current.isDateInToday($0.date) }
     }
-    
-    // Calculate weekly journaling streak
-    private var weeklyStreak: Int {
-        let calendar = Calendar.current
-        let today = Date()
-        let startOfWeek = calendar.date(from: calendar.dateComponents([.yearForWeekOfYear, .weekOfYear], from: today))!
-        
-        let thisWeekEntries = entries.filter { entry in
-            entry.date >= startOfWeek && entry.date <= today
-        }
-        
-        // Count unique days
-        let uniqueDays = Set(thisWeekEntries.map { calendar.startOfDay(for: $0.date) })
-        return uniqueDays.count
-    }
-    
+
     var body: some View {
         NavigationStack {
             ScrollView {
@@ -42,7 +27,7 @@ struct HomeView: View {
                         Text(greetingText)
                             .font(.largeTitle)
                             .fontWeight(.bold)
-                        
+
                         Text(Date().formatted(date: .complete, time: .omitted))
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
@@ -50,18 +35,18 @@ struct HomeView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal)
                     .padding(.top)
-                    
-                    // Weekly streak card
-                    WeeklyStreakCard(streak: weeklyStreak)
+
+                    // Streak card
+                    StreakCardView(entries: entries)
                         .padding(.horizontal)
-                    
+
                     // Today's entry section
                     VStack(alignment: .leading, spacing: 16) {
                         Text("Today's Entry")
                             .font(.title2)
                             .fontWeight(.semibold)
                             .padding(.horizontal)
-                        
+
                         if let entry = todayEntry {
                             TodayEntryCard(entry: entry)
                                 .padding(.horizontal)
@@ -76,7 +61,7 @@ struct HomeView: View {
                                 }
                         }
                     }
-                    
+
                     // Recent entries
                     if !entries.isEmpty {
                         VStack(alignment: .leading, spacing: 16) {
@@ -84,9 +69,9 @@ struct HomeView: View {
                                 Text("Recent Entries")
                                     .font(.title2)
                                     .fontWeight(.semibold)
-                                
+
                                 Spacer()
-                                
+
                                 NavigationLink(destination: EntryLibraryView()) {
                                     Text("See All")
                                         .font(.subheadline)
@@ -94,7 +79,7 @@ struct HomeView: View {
                                 }
                             }
                             .padding(.horizontal)
-                            
+
                             ForEach(entries.prefix(5)) { entry in
                                 if !entry.isToday {
                                     NavigationLink(destination: JournalEditorView(entry: entry)) {
@@ -112,10 +97,26 @@ struct HomeView: View {
             .background(Color(.systemGroupedBackground))
             .navigationTitle("")
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    NavigationLink(destination: WeeklyOverviewView()) {
-                        Image(systemName: "chart.bar.fill")
+                ToolbarItem(placement: .topBarLeading) {
+                    Button {
+                        showingSettings = true
+                    } label: {
+                        Image(systemName: "gearshape")
                             .font(.body)
+                    }
+                }
+
+                ToolbarItem(placement: .topBarTrailing) {
+                    HStack(spacing: 16) {
+                        NavigationLink(destination: WeeklyReviewView()) {
+                            Image(systemName: "calendar.badge.clock")
+                                .font(.body)
+                        }
+
+                        NavigationLink(destination: WeeklyOverviewView()) {
+                            Image(systemName: "chart.bar.fill")
+                                .font(.body)
+                        }
                     }
                 }
             }
@@ -126,9 +127,14 @@ struct HomeView: View {
                     }
                 }
             }
+            .sheet(isPresented: $showingSettings) {
+                NavigationStack {
+                    SettingsView()
+                }
+            }
         }
     }
-    
+
     private var greetingText: String {
         let hour = Calendar.current.component(.hour, from: Date())
         switch hour {
@@ -137,7 +143,7 @@ struct HomeView: View {
         default: return "Good Evening"
         }
     }
-    
+
     private func createTodayEntry() {
         let newEntry = JournalEntry()
         modelContext.insert(newEntry)
@@ -147,55 +153,23 @@ struct HomeView: View {
 
 // MARK: - Supporting Views
 
-struct WeeklyStreakCard: View {
-    let streak: Int
-    
-    var body: some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 4) {
-                Text("This Week")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                
-                HStack(alignment: .firstTextBaseline, spacing: 4) {
-                    Text("\(streak)")
-                        .font(.system(size: 36, weight: .bold))
-                    Text("days")
-                        .font(.title3)
-                        .foregroundStyle(.secondary)
-                }
-            }
-            
-            Spacer()
-            
-            Image(systemName: "calendar.badge.checkmark")
-                .font(.system(size: 40))
-                .foregroundStyle(.green.gradient)
-        }
-        .padding()
-        .background(Color(.systemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 16))
-        .shadow(color: .black.opacity(0.05), radius: 8, y: 2)
-    }
-}
-
 struct TodayEntryCard: View {
     let entry: JournalEntry
-    
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
                 Label("Today's Journal", systemImage: "pencil.circle.fill")
                     .font(.subheadline)
                     .foregroundStyle(.blue)
-                
+
                 Spacer()
-                
+
                 Text("\(entry.wordCount) words")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
-            
+
             if !entry.content.isEmpty {
                 Text(entry.content)
                     .font(.body)
@@ -207,7 +181,17 @@ struct TodayEntryCard: View {
                     .foregroundStyle(.secondary)
                     .italic()
             }
-            
+
+            if let mood = entry.mood {
+                HStack(spacing: 4) {
+                    Text(moodEmoji(for: mood))
+                        .font(.caption)
+                    Text(mood.capitalized)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
             HStack {
                 Spacer()
                 Text("Edit Entry")
@@ -223,6 +207,17 @@ struct TodayEntryCard: View {
         .clipShape(RoundedRectangle(cornerRadius: 16))
         .shadow(color: .black.opacity(0.05), radius: 8, y: 2)
     }
+
+    private func moodEmoji(for mood: String) -> String {
+        switch mood.lowercased() {
+        case "happy": return "😊"
+        case "calm": return "😌"
+        case "sad": return "😔"
+        case "frustrated": return "😤"
+        case "thoughtful": return "🤔"
+        default: return "😐"
+        }
+    }
 }
 
 struct EmptyEntryCard: View {
@@ -231,11 +226,11 @@ struct EmptyEntryCard: View {
             Image(systemName: "square.and.pencil")
                 .font(.system(size: 48))
                 .foregroundStyle(.blue.gradient)
-            
+
             Text("Start Today's Entry")
                 .font(.title3)
                 .fontWeight(.semibold)
-            
+
             Text("Tap here to begin journaling")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
@@ -250,14 +245,21 @@ struct EmptyEntryCard: View {
 
 struct EntryRowCard: View {
     let entry: JournalEntry
-    
+
     var body: some View {
         HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 4) {
-                Text(entry.formattedDate)
-                    .font(.subheadline)
-                    .fontWeight(.medium)
-                
+                HStack(spacing: 6) {
+                    Text(entry.formattedDate)
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+
+                    if let mood = entry.mood {
+                        Text(moodEmoji(for: mood))
+                            .font(.caption)
+                    }
+                }
+
                 if !entry.content.isEmpty {
                     Text(entry.content)
                         .font(.caption)
@@ -270,9 +272,9 @@ struct EntryRowCard: View {
                         .italic()
                 }
             }
-            
+
             Spacer()
-            
+
             VStack(alignment: .trailing, spacing: 4) {
                 Text("\(entry.wordCount)")
                     .font(.caption)
@@ -281,7 +283,7 @@ struct EntryRowCard: View {
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             }
-            
+
             Image(systemName: "chevron.right")
                 .font(.caption)
                 .foregroundStyle(.tertiary)
@@ -289,6 +291,17 @@ struct EntryRowCard: View {
         .padding()
         .background(Color(.systemBackground))
         .clipShape(RoundedRectangle(cornerRadius: 12))
+    }
+
+    private func moodEmoji(for mood: String) -> String {
+        switch mood.lowercased() {
+        case "happy": return "😊"
+        case "calm": return "😌"
+        case "sad": return "😔"
+        case "frustrated": return "😤"
+        case "thoughtful": return "🤔"
+        default: return "😐"
+        }
     }
 }
 

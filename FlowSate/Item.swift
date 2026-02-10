@@ -1,8 +1,9 @@
 //
-//  JournalEntry.swift
+//  Item.swift (JournalEntry)
 //  FlowSate
 //
 //  Created by Alyan Tharani on 1/2/26.
+//  Note: This file contains the JournalEntry model. File is named Item.swift for Xcode project compatibility.
 //
 
 import Foundation
