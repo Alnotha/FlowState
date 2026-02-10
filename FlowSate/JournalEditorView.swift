@@ -24,6 +24,8 @@ struct JournalEditorView: View {
     @State private var suggestions: [String] = []
     @State private var photoLoadError: String?
     @State private var showingPhotoError = false
+    @State private var moodSuggestion: MoodSuggestion?
+    @State private var moodSuggestionDebounce: Task<Void, Never>?
 
     private let maxPhotos = 10
 
@@ -127,6 +129,7 @@ struct JournalEditorView: View {
                     .onChange(of: entry.content) { _, _ in
                         entry.updateWordCount()
                         checkSpelling()
+                        debounceMoodSuggestion()
                     }
             } header: {
                 Text("Entry")
@@ -228,6 +231,12 @@ struct JournalEditorView: View {
                 await loadPhotos(newPhotos)
             }
         }
+        .moodSuggestion(moodSuggestion, onAccept: { mood in
+            entry.mood = mood
+            moodSuggestion = nil
+        }, onDismiss: {
+            moodSuggestion = nil
+        })
         .onAppear {
             if entry.content.isEmpty {
                 isEditorFocused = true
@@ -334,6 +343,19 @@ struct JournalEditorView: View {
         entry.photoData?.remove(at: index)
         if entry.photoData?.isEmpty == true {
             entry.photoData = nil
+        }
+    }
+
+    // MARK: - AI Mood Suggestion
+
+    private func debounceMoodSuggestion() {
+        moodSuggestionDebounce?.cancel()
+        moodSuggestionDebounce = Task {
+            try? await Task.sleep(for: .seconds(3))
+            guard !Task.isCancelled,
+                  entry.mood == nil,
+                  entry.wordCount > 30 else { return }
+            moodSuggestion = await AIService.shared.suggestMood(from: entry.content)
         }
     }
 }

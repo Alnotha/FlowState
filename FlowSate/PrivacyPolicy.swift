@@ -61,6 +61,11 @@ struct PrivacyPolicyView: View {
                 )
 
                 policySection(
+                    title: "AI Features",
+                    content: "FlowState offers optional AI-powered features including smart prompts, mood suggestions, weekly reflections, journal chat, theme detection, and gentle nudges. These features are disabled by default and require explicit opt-in. When enabled, brief summaries of your entries (not full text, except for mood suggestions) are sent to Anthropic's Claude API through your private proxy server. No personal identifiers are ever included. You can disable AI features at any time to return to fully offline mode."
+                )
+
+                policySection(
                     title: "Children's Privacy",
                     content: "FlowState does not knowingly collect any personal information from anyone, including children. Since all data remains on your device and we have no access to it, the app is suitable for users of all ages."
                 )

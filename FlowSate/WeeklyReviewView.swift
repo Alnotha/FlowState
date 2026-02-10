@@ -106,6 +106,9 @@ struct WeeklyReviewView: View {
         return "\(formatter.string(from: weekStart)) - \(formatter.string(from: weekEnd))"
     }
 
+    @State private var aiReflection: String?
+    @State private var isLoadingReflection = false
+
     private var reflectionMessage: String {
         if weekEntries.isEmpty {
             return "Every great journey begins with a single step. Start capturing your thoughts this week -- your future self will thank you."
@@ -146,6 +149,39 @@ struct WeeklyReviewView: View {
                 // Highlights
                 weekHighlightsSection
 
+                // Theme Insights Link
+                if AIService.shared.isEnabled && AIService.shared.themeDetectionEnabled {
+                    NavigationLink(destination: ThemeInsightsView()) {
+                        HStack(spacing: 12) {
+                            Image(systemName: "tag.fill")
+                                .font(.title2)
+                                .foregroundStyle(.purple.gradient)
+                                .frame(width: 40, height: 40)
+                                .background(Color.purple.opacity(0.1))
+                                .clipShape(Circle())
+
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("Themes & Patterns")
+                                    .font(.headline)
+                                    .foregroundStyle(.primary)
+                                Text("Discover recurring topics in your journal")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .font(.caption)
+                                .foregroundStyle(.tertiary)
+                        }
+                        .padding()
+                        .background(Color(.systemBackground))
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                        .shadow(color: .black.opacity(0.05), radius: 4, y: 2)
+                        .padding(.horizontal)
+                    }
+                    .buttonStyle(.plain)
+                }
+
                 // Reflection
                 reflectionSection
             }
@@ -154,6 +190,9 @@ struct WeeklyReviewView: View {
         .background(Color(.systemGroupedBackground))
         .navigationTitle("Weekly Review")
         .navigationBarTitleDisplayMode(.inline)
+        .task {
+            await loadAIReflection()
+        }
     }
 
     private var moodSummarySection: some View {
@@ -312,10 +351,11 @@ struct WeeklyReviewView: View {
                     .font(.title2)
                     .foregroundStyle(.yellow.gradient)
 
-                Text(reflectionMessage)
+                Text(aiReflection ?? reflectionMessage)
                     .font(.body)
                     .foregroundStyle(.primary)
                     .lineSpacing(4)
+                    .redacted(reason: isLoadingReflection ? .placeholder : [])
             }
             .padding()
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -324,6 +364,28 @@ struct WeeklyReviewView: View {
             .shadow(color: .black.opacity(0.05), radius: 8, y: 2)
             .padding(.horizontal)
         }
+    }
+
+    // MARK: - AI Reflection Loading
+
+    private func loadAIReflection() async {
+        guard !weekEntries.isEmpty else { return }
+        isLoadingReflection = true
+        let stats = WeeklyStats(
+            totalWords: totalWordsThisWeek,
+            averageWordsPerEntry: averageWordsPerEntry,
+            daysJournaled: Set(weekEntries.map { Calendar.current.startOfDay(for: $0.date) }).count,
+            consistencyScore: consistencyScore,
+            bestWritingDay: bestWritingDay?.dayName,
+            bestWritingDayWords: bestWritingDay?.words ?? 0,
+            entriesWithPhotos: entriesWithPhotos
+        )
+        aiReflection = await AIService.shared.generateWeeklyReflection(
+            entries: weekEntries,
+            moodDistribution: moodDistribution.map { ($0.mood, $0.count) },
+            stats: stats
+        )
+        isLoadingReflection = false
     }
 }
 

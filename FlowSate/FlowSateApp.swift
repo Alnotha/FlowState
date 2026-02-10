@@ -12,6 +12,7 @@ import UserNotifications
 @main
 struct FlowSateApp: App {
     @AppStorage("appColorScheme") private var appColorScheme: String = "system"
+    @ObservedObject private var authManager = AuthenticationManager.shared
 
     var sharedModelContainer: ModelContainer = {
         let schema = Schema([

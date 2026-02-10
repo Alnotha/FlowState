@@ -13,6 +13,9 @@ struct HomeView: View {
     @Query(sort: \JournalEntry.date, order: .reverse) private var entries: [JournalEntry]
     @State private var showingEditor = false
     @State private var showingSettings = false
+    @State private var showingChat = false
+    @State private var nudge: EmotionalNudge?
+    @State private var showNudge = true
 
     private var todayEntry: JournalEntry? {
         entries.first { Calendar.current.isDateInToday($0.date) }
@@ -40,6 +43,21 @@ struct HomeView: View {
                     StreakCardView(entries: entries)
                         .padding(.horizontal)
 
+                    // AI Nudge Banner
+                    if let nudge, showNudge {
+                        NudgeBanner(
+                            nudge: nudge,
+                            onAction: {
+                                createTodayEntry()
+                            },
+                            onDismiss: {
+                                withAnimation { showNudge = false }
+                            }
+                        )
+                        .padding(.horizontal)
+                        .transition(.opacity.combined(with: .move(edge: .top)))
+                    }
+
                     // Today's entry section
                     VStack(alignment: .leading, spacing: 16) {
                         Text("Today's Entry")
@@ -54,11 +72,21 @@ struct HomeView: View {
                                     showingEditor = true
                                 }
                         } else {
-                            EmptyEntryCard()
+                            if AIService.shared.isEnabled && AIService.shared.smartPromptsEnabled {
+                                SmartPromptCard(
+                                    recentEntries: entries,
+                                    onStartWriting: { _ in
+                                        createTodayEntry()
+                                    }
+                                )
                                 .padding(.horizontal)
-                                .onTapGesture {
-                                    createTodayEntry()
-                                }
+                            } else {
+                                EmptyEntryCard()
+                                    .padding(.horizontal)
+                                    .onTapGesture {
+                                        createTodayEntry()
+                                    }
+                            }
                         }
                     }
 
@@ -108,6 +136,15 @@ struct HomeView: View {
 
                 ToolbarItem(placement: .topBarTrailing) {
                     HStack(spacing: 16) {
+                        if AIService.shared.isEnabled && AIService.shared.chatEnabled {
+                            Button {
+                                showingChat = true
+                            } label: {
+                                Image(systemName: "bubble.left.and.text.bubble.right")
+                                    .font(.body)
+                            }
+                        }
+
                         NavigationLink(destination: WeeklyReviewView()) {
                             Image(systemName: "calendar.badge.clock")
                                 .font(.body)
@@ -131,6 +168,17 @@ struct HomeView: View {
                 NavigationStack {
                     SettingsView()
                 }
+            }
+            .fullScreenCover(isPresented: $showingChat) {
+                JournalChatView()
+                    .modelContainer(for: JournalEntry.self)
+            }
+            .task {
+                nudge = await AIService.shared.generateNudge(
+                    recentEntries: Array(entries.prefix(5)),
+                    currentStreak: StreakManager.currentStreak(from: entries),
+                    totalEntries: entries.count
+                )
             }
         }
     }

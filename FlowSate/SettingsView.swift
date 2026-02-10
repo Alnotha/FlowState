@@ -10,12 +10,15 @@ import SwiftData
 
 struct SettingsView: View {
     @ObservedObject private var notificationManager = NotificationManager.shared
+    @ObservedObject private var authManager = AuthenticationManager.shared
     @AppStorage("appColorScheme") private var appColorScheme: String = "system"
     @State private var showingExportAlert = false
 
     var body: some View {
         List {
+            accountSection
             notificationsSection
+            aiSection
             appearanceSection
             dataSection
             aboutSection
@@ -23,6 +26,45 @@ struct SettingsView: View {
         .listStyle(.insetGrouped)
         .navigationTitle("Settings")
         .navigationBarTitleDisplayMode(.large)
+    }
+
+    private var accountSection: some View {
+        Section {
+            if authManager.authState.isSignedIn {
+                HStack {
+                    Image(systemName: "person.crop.circle.fill")
+                        .font(.title2)
+                        .foregroundStyle(.green)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(authManager.userDisplayName ?? "Apple ID User")
+                            .font(.subheadline)
+                            .fontWeight(.medium)
+                        Text("Signed in")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            } else {
+                NavigationLink {
+                    AISettingsView()
+                } label: {
+                    HStack {
+                        Image(systemName: "person.crop.circle")
+                            .font(.title2)
+                            .foregroundStyle(.secondary)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Sign In")
+                                .font(.subheadline)
+                            Text("Required for AI features")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+            }
+        } header: {
+            Text("Account")
+        }
     }
 
     private var notificationsSection: some View {
@@ -50,6 +92,20 @@ struct SettingsView: View {
             Text("Notifications")
         } footer: {
             Text("Receive a gentle reminder to journal each day.")
+        }
+    }
+
+    private var aiSection: some View {
+        Section {
+            NavigationLink {
+                AISettingsView()
+            } label: {
+                Label("AI Features", systemImage: "sparkles")
+            }
+        } header: {
+            Text("Intelligence")
+        } footer: {
+            Text("Personalized prompts, mood suggestions, and insights powered by AI.")
         }
     }
 

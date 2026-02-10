@@ -1,0 +1,13 @@
+name = "flowstate-ai-proxy"
+main = "worker.js"
+compatibility_date = "2024-01-01"
+
+# To deploy:
+# 1. Install wrangler: npm install -g wrangler
+# 2. Login: wrangler login
+# 3. Set your Anthropic API key: wrangler secret put ANTHROPIC_API_KEY
+# 4. Set JWT signing secret: wrangler secret put JWT_SECRET
+#    (generate with: openssl rand -hex 32)
+# 5. Deploy: wrangler deploy
+#
+# Your worker URL will be: https://flowstate-ai-proxy.<your-subdomain>.workers.dev

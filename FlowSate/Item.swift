@@ -17,6 +17,8 @@ final class JournalEntry {
     var mood: String?
     var photoData: [Data]? // Store image data
     var wordCount: Int
+    var aiSuggestedMood: String?
+    var themes: [String]?
     
     init(date: Date = Date(), content: String = "", mood: String? = nil, photoData: [Data]? = nil) {
         self.id = UUID()
