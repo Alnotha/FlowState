@@ -44,6 +44,8 @@ struct SettingsView: View {
                             .foregroundStyle(.secondary)
                     }
                 }
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel("Signed in as \(authManager.userDisplayName ?? "Apple ID User")")
             } else {
                 NavigationLink {
                     AISettingsView()
@@ -159,6 +161,8 @@ struct SettingsView: View {
                     Text("\(version) (\(build))")
                         .foregroundStyle(.secondary)
                 }
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel("Version \(version), build \(build)")
             }
         }
     }

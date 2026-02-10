@@ -17,15 +17,15 @@ struct WeeklyReviewView: View {
         var calendar = Calendar.current
         calendar.firstWeekday = 1
         let components = calendar.dateComponents([.yearForWeekOfYear, .weekOfYear], from: Date())
-        return calendar.date(from: components)!
+        return calendar.date(from: components) ?? Date()
     }
 
     private var weekEnd: Date {
-        Calendar.current.date(byAdding: .day, value: 6, to: weekStart)!
+        Calendar.current.date(byAdding: .day, value: 6, to: weekStart) ?? Date()
     }
 
     private var weekEntries: [JournalEntry] {
-        let endOfSaturday = Calendar.current.date(byAdding: .day, value: 7, to: weekStart)!
+        let endOfSaturday = Calendar.current.date(byAdding: .day, value: 7, to: weekStart) ?? Date()
         return allEntries.filter { $0.date >= weekStart && $0.date < endOfSaturday }
     }
 
@@ -133,6 +133,7 @@ struct WeeklyReviewView: View {
                     Text("Weekly Review")
                         .font(.largeTitle)
                         .fontWeight(.bold)
+                        .accessibilityAddTraits(.isHeader)
                     Text(dateRangeString)
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
@@ -245,6 +246,7 @@ struct WeeklyReviewView: View {
                         }
                     }
                     .frame(height: CGFloat(moodDistribution.count) * 48 + 16)
+                    .accessibilityLabel("Mood distribution: \(moodDistribution.map { "\($0.mood.capitalized) \($0.count) times" }.joined(separator: ", "))")
 
                     if let topMood = mostCommonMood {
                         HStack(spacing: 8) {
@@ -363,6 +365,9 @@ struct WeeklyReviewView: View {
             .clipShape(RoundedRectangle(cornerRadius: 16))
             .shadow(color: .black.opacity(0.05), radius: 8, y: 2)
             .padding(.horizontal)
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("AI weekly reflection: \(aiReflection ?? reflectionMessage)")
+            .accessibilityAddTraits(.isStaticText)
         }
     }
 
@@ -414,6 +419,8 @@ private struct ReviewStatCard: View {
         .background(Color(.systemBackground))
         .clipShape(RoundedRectangle(cornerRadius: 16))
         .shadow(color: .black.opacity(0.05), radius: 8, y: 2)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(title): \(value)")
     }
 }
 
@@ -447,6 +454,8 @@ private struct ReviewHighlightRow: View {
         .background(Color(.systemBackground))
         .clipShape(RoundedRectangle(cornerRadius: 12))
         .shadow(color: .black.opacity(0.05), radius: 4, y: 2)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(title): \(detail)")
     }
 }
 

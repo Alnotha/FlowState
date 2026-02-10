@@ -93,10 +93,8 @@ final class NotificationManager: ObservableObject {
         let trigger = UNCalendarNotificationTrigger(dateMatching: dateComponents, repeats: true)
         let request = UNNotificationRequest(identifier: reminderIdentifier, content: content, trigger: trigger)
 
-        notificationCenter.add(request) { error in
-            if let error {
-                print("NotificationManager: Failed to schedule reminder - \(error.localizedDescription)")
-            }
+        notificationCenter.add(request) { _ in
+            // Error handled silently; notification scheduling is non-critical
         }
     }
 

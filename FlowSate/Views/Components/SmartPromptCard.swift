@@ -57,6 +57,7 @@ struct SmartPromptCard: View {
                         .foregroundStyle(.secondary)
                 }
                 .disabled(isLoading)
+                .accessibilityLabel("Get new prompt")
             }
 
             Text(prompt ?? fallbackPrompt)
@@ -65,6 +66,7 @@ struct SmartPromptCard: View {
                 .lineSpacing(4)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .redacted(reason: isLoading ? .placeholder : [])
+                .accessibilityAddTraits(.isStaticText)
 
             Button {
                 onStartWriting(prompt ?? fallbackPrompt)
@@ -78,6 +80,7 @@ struct SmartPromptCard: View {
                     .background(Color.blue)
                     .clipShape(RoundedRectangle(cornerRadius: 12))
             }
+            .accessibilityLabel("Write today's journal entry")
         }
         .padding()
         .background(Color(.systemBackground))

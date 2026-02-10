@@ -49,6 +49,8 @@ actor CloudflareClient {
         request.setValue(appBundle, forHTTPHeaderField: "X-App-Bundle")
         if let token = authorizationToken() {
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        } else {
+            throw ClaudeAPIError.unauthorized
         }
 
         let body = ClaudeRequestBody(
@@ -83,7 +85,10 @@ actor CloudflareClient {
                 outputTokens: apiResponse.usage?.output_tokens ?? 0
             )
         case 401:
-            await AuthenticationManager.shared.signOut()
+            let refreshed = await AuthenticationManager.shared.refreshTokenIfNeeded()
+            if !refreshed {
+                await AuthenticationManager.shared.signOut()
+            }
             throw ClaudeAPIError.unauthorized
         case 429:
             throw ClaudeAPIError.rateLimited
@@ -130,11 +135,25 @@ actor CloudflareClient {
                     request.setValue(appBundle, forHTTPHeaderField: "X-App-Bundle")
                     if let token {
                         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+                    } else {
+                        throw ClaudeAPIError.unauthorized
                     }
                     request.httpBody = bodyData
 
                     let (bytes, response) = try await session.bytes(for: request)
 
+                    if let httpResponse = response as? HTTPURLResponse {
+                        if httpResponse.statusCode == 401 {
+                            let refreshed = await AuthenticationManager.shared.refreshTokenIfNeeded()
+                            if !refreshed {
+                                await AuthenticationManager.shared.signOut()
+                            }
+                            throw ClaudeAPIError.unauthorized
+                        }
+                        if httpResponse.statusCode == 429 {
+                            throw ClaudeAPIError.rateLimited
+                        }
+                    }
                     guard let httpResponse = response as? HTTPURLResponse,
                           httpResponse.statusCode == 200 else {
                         throw ClaudeAPIError.invalidResponse(

@@ -2,6 +2,10 @@
 // Proxies requests to the Anthropic Claude API with Sign in with Apple auth
 // Secrets: ANTHROPIC_API_KEY, JWT_SECRET
 
+// TODO: Add nonce validation for production replay attack prevention.
+// The Apple identity token includes a nonce claim that should be validated
+// against a server-generated nonce to prevent token replay attacks.
+
 const ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages";
 const ANTHROPIC_VERSION = "2023-06-01";
 const APPLE_JWKS_URL = "https://appleid.apple.com/auth/keys";
@@ -10,7 +14,28 @@ const APPLE_AUDIENCE = "alnotha.FlowSate";
 const JWT_EXPIRY_SECONDS = 7 * 24 * 60 * 60; // 7 days
 const RATE_LIMIT_PER_MINUTE = 60;
 
+// Fix #1: Whitelist allowed models and allowed body fields
+const ALLOWED_MODELS = new Set([
+  "claude-haiku-4-5-20251001",
+  "claude-sonnet-4-5-20250929",
+  "claude-3-5-haiku-20241022",
+  "claude-3-5-sonnet-20241022",
+]);
+const MAX_TOKENS_CAP = 1024;
+const MAX_REQUEST_BODY_SIZE = 10 * 1024; // 10KB for AI proxy
+const ALLOWED_BODY_FIELDS = new Set(["model", "max_tokens", "messages", "system", "stream", "temperature"]);
+
+// Fix #7: General request size limit for POST handlers
+const MAX_POST_BODY_SIZE = 50 * 1024; // 50KB
+
+// Fix #2: Cache Apple JWKS with 1-hour TTL
+let cachedJWKS = { data: null, fetchedAt: 0 };
+const JWKS_CACHE_TTL = 60 * 60 * 1000; // 1 hour in milliseconds
+
 const rateLimitMap = new Map();
+
+// Fix #3: Separate rate limit map for auth endpoints
+const authRateLimitMap = new Map();
 
 function isRateLimited(key) {
   const now = Date.now();
@@ -22,9 +47,23 @@ function isRateLimited(key) {
   return false;
 }
 
-function corsHeaders() {
+// Fix #3: IP-based rate limiting for auth endpoints
+function isAuthRateLimited(ip, maxPerMinute) {
+  const now = Date.now();
+  const windowStart = now - 60000;
+  const key = `${ip}`;
+  const timestamps = (authRateLimitMap.get(key) || []).filter((t) => t > windowStart);
+  if (timestamps.length >= maxPerMinute) return true;
+  timestamps.push(now);
+  authRateLimitMap.set(key, timestamps);
+  return false;
+}
+
+// Fix #5: Remove CORS headers entirely from non-OPTIONS responses.
+// iOS native apps don't need CORS. Only provide minimal headers for OPTIONS preflight.
+function optionsCorsHeaders() {
   return {
-    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Origin": "null",
     "Access-Control-Allow-Methods": "POST, OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type, X-App-Bundle, Authorization",
     "Access-Control-Max-Age": "86400",
@@ -34,17 +73,26 @@ function corsHeaders() {
 function jsonResponse(body, status = 200, extraHeaders = {}) {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { "Content-Type": "application/json", ...corsHeaders(), ...extraHeaders },
+    headers: { "Content-Type": "application/json", ...extraHeaders },
   });
+}
+
+// Fix #7: Check Content-Length before parsing request body
+function checkContentLength(request, maxSize) {
+  const contentLength = request.headers.get("Content-Length");
+  if (contentLength && parseInt(contentLength, 10) > maxSize) {
+    return jsonResponse({ error: "Request body too large" }, 413);
+  }
+  return null;
 }
 
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
 
-    // CORS preflight
+    // Fix #5: CORS preflight with minimal headers
     if (request.method === "OPTIONS") {
-      return new Response(null, { headers: corsHeaders() });
+      return new Response(null, { headers: optionsCorsHeaders() });
     }
 
     // Route handling
@@ -56,8 +104,13 @@ export default {
       return handleTokenRefresh(request, env);
     }
 
-    // Default: AI proxy with JWT validation
-    return handleAIProxy(request, env);
+    // Fix #8: Only route POST to `/` or `/v1/messages` to the AI proxy
+    if ((url.pathname === "/" || url.pathname === "/v1/messages") && request.method === "POST") {
+      return handleAIProxy(request, env);
+    }
+
+    // Fix #8: Explicit 404 for all other paths
+    return jsonResponse({ error: "Not found" }, 404);
   },
 };
 
@@ -65,6 +118,16 @@ export default {
 
 async function handleAppleAuth(request, env) {
   try {
+    // Fix #7: Check request body size
+    const sizeError = checkContentLength(request, MAX_POST_BODY_SIZE);
+    if (sizeError) return sizeError;
+
+    // Fix #3: Rate limit auth endpoint - 5 requests per minute per IP
+    const clientIP = request.headers.get("CF-Connecting-IP") || "unknown";
+    if (isAuthRateLimited(clientIP, 5)) {
+      return jsonResponse({ error: "Rate limited" }, 429, { "Retry-After": "60" });
+    }
+
     const body = await request.json();
     const { identityToken, userIdentifier } = body;
 
@@ -72,8 +135,8 @@ async function handleAppleAuth(request, env) {
       return jsonResponse({ error: "Missing identityToken or userIdentifier" }, 400);
     }
 
-    // Verify Apple identity token
-    const applePayload = await verifyAppleToken(identityToken);
+    // Fix #9: Pass expected audience into verifyAppleToken
+    const applePayload = await verifyAppleToken(identityToken, APPLE_AUDIENCE);
     if (!applePayload) {
       return jsonResponse({ error: "Invalid Apple identity token" }, 401);
     }
@@ -83,14 +146,12 @@ async function handleAppleAuth(request, env) {
       return jsonResponse({ error: "User identifier mismatch" }, 401);
     }
 
-    // Verify audience matches our bundle ID
-    if (applePayload.aud !== APPLE_AUDIENCE) {
-      return jsonResponse({ error: "Token audience mismatch" }, 401);
-    }
+    // Fix #12: Use canonical `sub` from Apple token as the user identifier
+    const canonicalUserID = applePayload.sub;
 
-    // Issue our own JWT
+    // Issue our own JWT using the canonical Apple sub
     const jwt = await createJWT(
-      { sub: userIdentifier, aud: APPLE_AUDIENCE },
+      { sub: canonicalUserID, aud: APPLE_AUDIENCE },
       env.JWT_SECRET,
       JWT_EXPIRY_SECONDS
     );
@@ -98,10 +159,11 @@ async function handleAppleAuth(request, env) {
     return jsonResponse({
       token: jwt,
       expiresIn: JWT_EXPIRY_SECONDS,
-      userID: userIdentifier,
+      userID: canonicalUserID,
     });
   } catch (error) {
-    return jsonResponse({ error: "Auth error", message: error.message }, 500);
+    // Fix #6: Sanitize error messages - don't expose internal details
+    return jsonResponse({ error: "Authentication failed" }, 500);
   }
 }
 
@@ -109,6 +171,16 @@ async function handleAppleAuth(request, env) {
 
 async function handleTokenRefresh(request, env) {
   try {
+    // Fix #7: Check request body size (even though refresh uses headers, enforce limit)
+    const sizeError = checkContentLength(request, MAX_POST_BODY_SIZE);
+    if (sizeError) return sizeError;
+
+    // Fix #3: Rate limit refresh endpoint - 3 requests per minute per IP
+    const clientIP = request.headers.get("CF-Connecting-IP") || "unknown";
+    if (isAuthRateLimited(clientIP, 3)) {
+      return jsonResponse({ error: "Rate limited" }, 429, { "Retry-After": "60" });
+    }
+
     const authHeader = request.headers.get("Authorization");
     if (!authHeader?.startsWith("Bearer ")) {
       return jsonResponse({ error: "Missing authorization" }, 401);
@@ -133,7 +205,8 @@ async function handleTokenRefresh(request, env) {
       userID: payload.sub,
     });
   } catch (error) {
-    return jsonResponse({ error: "Refresh error", message: error.message }, 500);
+    // Fix #6: Sanitize error messages
+    return jsonResponse({ error: "Token refresh failed" }, 500);
   }
 }
 
@@ -143,6 +216,10 @@ async function handleAIProxy(request, env) {
   if (request.method !== "POST") {
     return jsonResponse({ error: "Method not allowed" }, 405);
   }
+
+  // Fix #7: Check request body size
+  const sizeError = checkContentLength(request, MAX_POST_BODY_SIZE);
+  if (sizeError) return sizeError;
 
   // Verify app bundle header
   const appBundle = request.headers.get("X-App-Bundle");
@@ -169,7 +246,31 @@ async function handleAIProxy(request, env) {
   }
 
   try {
+    // Fix #1: Check Content-Length for AI proxy body size (10KB limit)
+    const contentLength = request.headers.get("Content-Length");
+    if (contentLength && parseInt(contentLength, 10) > MAX_REQUEST_BODY_SIZE) {
+      return jsonResponse({ error: "Request body too large" }, 413);
+    }
+
     const body = await request.json();
+
+    // Fix #1: Validate model is in the whitelist
+    if (body.model && !ALLOWED_MODELS.has(body.model)) {
+      return jsonResponse({ error: "Model not allowed" }, 400);
+    }
+
+    // Fix #1: Cap max_tokens
+    if (body.max_tokens !== undefined) {
+      body.max_tokens = Math.min(body.max_tokens, MAX_TOKENS_CAP);
+    }
+
+    // Fix #1: Strip unknown fields - only allow whitelisted fields
+    const sanitizedBody = {};
+    for (const field of ALLOWED_BODY_FIELDS) {
+      if (body[field] !== undefined) {
+        sanitizedBody[field] = body[field];
+      }
+    }
 
     const anthropicRequest = {
       method: "POST",
@@ -178,10 +279,10 @@ async function handleAIProxy(request, env) {
         "x-api-key": env.ANTHROPIC_API_KEY,
         "anthropic-version": ANTHROPIC_VERSION,
       },
-      body: JSON.stringify(body),
+      body: JSON.stringify(sanitizedBody),
     };
 
-    const isStreaming = body.stream === true;
+    const isStreaming = sanitizedBody.stream === true;
     const response = await fetch(ANTHROPIC_API_URL, anthropicRequest);
 
     if (isStreaming) {
@@ -190,7 +291,6 @@ async function handleAIProxy(request, env) {
         headers: {
           "Content-Type": "text/event-stream",
           "Cache-Control": "no-cache",
-          ...corsHeaders(),
         },
       });
     }
@@ -198,25 +298,40 @@ async function handleAIProxy(request, env) {
     const data = await response.json();
     return new Response(JSON.stringify(data), {
       status: response.status,
-      headers: { "Content-Type": "application/json", ...corsHeaders() },
+      headers: { "Content-Type": "application/json" },
     });
   } catch (error) {
-    return jsonResponse({ error: "Proxy error", message: error.message }, 502);
+    // Fix #6: Sanitize error messages
+    return jsonResponse({ error: "Proxy error" }, 502);
   }
 }
 
 // MARK: - Apple Token Verification
 
-async function verifyAppleToken(tokenString) {
+// Fix #9: Accept expectedAudience as a parameter
+async function verifyAppleToken(tokenString, expectedAudience) {
   try {
     // Decode header to get key ID
     const [headerB64] = tokenString.split(".");
     const header = JSON.parse(atob(headerB64.replace(/-/g, "+").replace(/_/g, "/")));
     const kid = header.kid;
 
-    // Fetch Apple's public keys (JWKS)
-    const jwksResponse = await fetch(APPLE_JWKS_URL);
-    const jwks = await jwksResponse.json();
+    // Fix #4: Validate algorithm is RS256 before proceeding
+    if (header.alg !== "RS256") {
+      throw new Error("Unsupported algorithm");
+    }
+
+    // Fix #2: Use cached JWKS if fresh, otherwise fetch and cache
+    const now = Date.now();
+    let jwks;
+    if (cachedJWKS.data && (now - cachedJWKS.fetchedAt) < JWKS_CACHE_TTL) {
+      jwks = cachedJWKS.data;
+    } else {
+      const jwksResponse = await fetch(APPLE_JWKS_URL);
+      jwks = await jwksResponse.json();
+      cachedJWKS = { data: jwks, fetchedAt: now };
+    }
+
     const key = jwks.keys.find((k) => k.kid === kid);
     if (!key) return null;
 
@@ -245,6 +360,9 @@ async function verifyAppleToken(tokenString) {
 
     // Check expiration
     if (payload.exp < Math.floor(Date.now() / 1000)) return null;
+
+    // Fix #9: Verify audience inside verifyAppleToken
+    if (payload.aud !== expectedAudience) return null;
 
     return payload;
   } catch {
@@ -282,6 +400,10 @@ async function verifyJWT(token, secret) {
   try {
     const [headerB64, payloadB64, signatureB64] = token.split(".");
     if (!headerB64 || !payloadB64 || !signatureB64) return null;
+
+    // Fix #10: Validate alg claim in the header is HS256
+    const header = JSON.parse(atob(headerB64.replace(/-/g, "+").replace(/_/g, "/")));
+    if (header.alg !== "HS256") return null;
 
     const key = await crypto.subtle.importKey(
       "raw",

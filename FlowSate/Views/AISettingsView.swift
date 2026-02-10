@@ -15,6 +15,7 @@ struct AISettingsView: View {
     @State private var workerURL = CloudflareClient.workerURL
     @State private var showingPrivacyInfo = false
     @State private var testStatus: TestStatus = .idle
+    @State private var urlWarning: String? = nil
 
     enum TestStatus {
         case idle, testing, success, failed(String)
@@ -82,6 +83,7 @@ struct AISettingsView: View {
                         authManager.signOut()
                     }
                     .font(.subheadline)
+                    .accessibilityLabel("Sign out of Apple ID")
                 }
 
             case .error(let message):
@@ -145,8 +147,27 @@ struct AISettingsView: View {
                     .autocorrectionDisabled()
                     .font(.system(.body, design: .monospaced))
                     .onChange(of: workerURL) { _, newValue in
-                        CloudflareClient.workerURL = newValue
+                        if newValue.isEmpty {
+                            urlWarning = nil
+                            CloudflareClient.workerURL = newValue
+                        } else if !newValue.hasPrefix("https://") {
+                            urlWarning = "URL must start with https://"
+                            // Don't save insecure URLs
+                        } else {
+                            if !newValue.hasSuffix(".workers.dev") {
+                                urlWarning = "URL does not end with .workers.dev -- are you sure this is correct?"
+                            } else {
+                                urlWarning = nil
+                            }
+                            CloudflareClient.workerURL = newValue
+                        }
                     }
+
+                if let urlWarning {
+                    Text(urlWarning)
+                        .font(.caption)
+                        .foregroundStyle(urlWarning.contains("must start") ? .red : .orange)
+                }
             }
 
             Button {
@@ -170,6 +191,7 @@ struct AISettingsView: View {
                 }
             }
             .disabled(workerURL.isEmpty)
+            .accessibilityLabel("Test connection to AI server")
 
             if case .failed(let message) = testStatus {
                 Text(message)

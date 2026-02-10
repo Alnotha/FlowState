@@ -37,6 +37,7 @@ struct MoodSuggestionBanner: View {
                         Text(suggestion.reasoning)
                             .font(.subheadline)
                             .foregroundStyle(.primary)
+                            .accessibilityAddTraits(.isStaticText)
 
                         Text("Tap to set your mood")
                             .font(.caption2)
@@ -58,6 +59,7 @@ struct MoodSuggestionBanner: View {
                             .background(Color(.systemGray5))
                             .clipShape(Circle())
                     }
+                    .accessibilityLabel("Dismiss suggestion")
                 }
 
                 HStack(spacing: 12) {
@@ -76,6 +78,7 @@ struct MoodSuggestionBanner: View {
                             .background(Color.blue)
                             .clipShape(RoundedRectangle(cornerRadius: 8))
                     }
+                    .accessibilityLabel("Accept mood suggestion")
 
                     Button {
                         withAnimation(.easeOut(duration: 0.2)) {
@@ -91,6 +94,7 @@ struct MoodSuggestionBanner: View {
                             .background(Color(.systemGray6))
                             .clipShape(RoundedRectangle(cornerRadius: 8))
                     }
+                    .accessibilityLabel("Dismiss suggestion")
                 }
             }
             .padding()

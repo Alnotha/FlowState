@@ -30,6 +30,7 @@ struct HomeView: View {
                         Text(greetingText)
                             .font(.largeTitle)
                             .fontWeight(.bold)
+                            .accessibilityAddTraits(.isHeader)
 
                         Text(Date().formatted(date: .complete, time: .omitted))
                             .font(.subheadline)
@@ -132,6 +133,7 @@ struct HomeView: View {
                         Image(systemName: "gearshape")
                             .font(.body)
                     }
+                    .accessibilityLabel("Settings")
                 }
 
                 ToolbarItem(placement: .topBarTrailing) {
@@ -143,17 +145,20 @@ struct HomeView: View {
                                 Image(systemName: "bubble.left.and.text.bubble.right")
                                     .font(.body)
                             }
+                            .accessibilityLabel("Chat with journal")
                         }
 
                         NavigationLink(destination: WeeklyReviewView()) {
                             Image(systemName: "calendar.badge.clock")
                                 .font(.body)
                         }
+                        .accessibilityLabel("Weekly review")
 
                         NavigationLink(destination: WeeklyOverviewView()) {
                             Image(systemName: "chart.bar.fill")
                                 .font(.body)
                         }
+                        .accessibilityLabel("All entries")
                     }
                 }
             }
@@ -254,6 +259,9 @@ struct TodayEntryCard: View {
         .background(Color(.systemBackground))
         .clipShape(RoundedRectangle(cornerRadius: 16))
         .shadow(color: .black.opacity(0.05), radius: 8, y: 2)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Today's journal entry, \(entry.wordCount) words\(entry.mood.map { ", mood: \($0)" } ?? ""). \(entry.content.isEmpty ? "Tap to start writing" : String(entry.content.prefix(100)))")
+        .accessibilityHint("Double tap to edit entry")
     }
 
     private func moodEmoji(for mood: String) -> String {
@@ -288,6 +296,9 @@ struct EmptyEntryCard: View {
         .background(Color(.systemBackground))
         .clipShape(RoundedRectangle(cornerRadius: 16))
         .shadow(color: .black.opacity(0.05), radius: 8, y: 2)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Write today's journal entry")
+        .accessibilityHint("Double tap to start writing")
     }
 }
 
@@ -339,6 +350,8 @@ struct EntryRowCard: View {
         .padding()
         .background(Color(.systemBackground))
         .clipShape(RoundedRectangle(cornerRadius: 12))
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(entry.formattedDate)\(entry.mood.map { ", mood: \($0)" } ?? ""), \(entry.wordCount) words. \(entry.content.isEmpty ? "Empty entry" : String(entry.content.prefix(80)))")
     }
 
     private func moodEmoji(for mood: String) -> String {

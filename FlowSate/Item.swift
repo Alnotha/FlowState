@@ -15,7 +15,7 @@ final class JournalEntry {
     var date: Date
     var content: String
     var mood: String?
-    var photoData: [Data]? // Store image data
+    @Attribute(.externalStorage) var photoData: [Data]? // Store image data
     var wordCount: Int
     var aiSuggestedMood: String?
     var themes: [String]?

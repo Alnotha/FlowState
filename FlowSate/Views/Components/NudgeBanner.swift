@@ -26,6 +26,7 @@ struct NudgeBanner: View {
                     .font(.subheadline)
                     .foregroundStyle(.primary)
                     .lineSpacing(2)
+                    .accessibilityAddTraits(.isStaticText)
 
                 if let actionLabel = nudge.actionLabel, let onAction {
                     Button {
@@ -51,6 +52,7 @@ struct NudgeBanner: View {
                     .background(Color(.systemGray5))
                     .clipShape(Circle())
             }
+            .accessibilityLabel("Dismiss")
         }
         .padding()
         .background(Color(.systemBackground))

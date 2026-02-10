@@ -73,6 +73,7 @@ struct EntryLibraryView: View {
                     } label: {
                         Image(systemName: "square.and.arrow.up")
                     }
+                    .accessibilityLabel("Export entries")
                 }
             }
         }
@@ -136,6 +137,8 @@ struct EntryLibraryRow: View {
             }
         }
         .padding(.vertical, 4)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(entry.date.formatted(date: .abbreviated, time: .omitted))\(entry.mood.map { ", mood: \($0)" } ?? ""), \(entry.wordCount) words. \(entry.content.isEmpty ? "Empty entry" : String(entry.content.prefix(80)))")
     }
 }
 

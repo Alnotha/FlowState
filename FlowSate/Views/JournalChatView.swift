@@ -15,7 +15,10 @@ struct JournalChatView: View {
     @State private var messages: [ChatMessage] = []
     @State private var inputText = ""
     @State private var isStreaming = false
+    @State private var streamingTask: Task<Void, Never>?
     @FocusState private var isInputFocused: Bool
+
+    private let maxMessages = 50
 
     private let suggestedQuestions = [
         "When was the last time I felt really happy?",
@@ -43,6 +46,7 @@ struct JournalChatView: View {
                     Button("Done") { dismiss() }
                 }
             }
+            .onDisappear { streamingTask?.cancel() }
         }
     }
 
@@ -94,6 +98,7 @@ struct JournalChatView: View {
                             .clipShape(RoundedRectangle(cornerRadius: 12))
                             .shadow(color: .black.opacity(0.05), radius: 4, y: 2)
                         }
+                        .accessibilityHint("Double tap to ask this question")
                         .padding(.horizontal)
                     }
                 }
@@ -146,6 +151,8 @@ struct JournalChatView: View {
                 .lineLimit(1...4)
                 .focused($isInputFocused)
                 .onSubmit { sendMessage(inputText) }
+                .accessibilityLabel("Message")
+                .accessibilityHint("Type a message to chat about your journal")
 
             Button {
                 sendMessage(inputText)
@@ -155,6 +162,7 @@ struct JournalChatView: View {
                     .foregroundStyle(inputText.trimmingCharacters(in: .whitespaces).isEmpty || isStreaming ? .gray : .blue)
             }
             .disabled(inputText.trimmingCharacters(in: .whitespaces).isEmpty || isStreaming)
+            .accessibilityLabel("Send message")
         }
         .padding(.horizontal)
         .padding(.vertical, 10)
@@ -167,6 +175,13 @@ struct JournalChatView: View {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
 
+        if messages.count >= maxMessages {
+            // Remove oldest pair (user + assistant) to make room
+            if messages.count >= 2 {
+                messages.removeFirst(2)
+            }
+        }
+
         let userMessage = ChatMessage(role: .user, content: trimmed)
         messages.append(userMessage)
         inputText = ""
@@ -174,9 +189,9 @@ struct JournalChatView: View {
 
         let assistantMessage = ChatMessage(role: .assistant, content: "")
         messages.append(assistantMessage)
-        let assistantIndex = messages.count - 1
+        let assistantID = assistantMessage.id
 
-        Task {
+        streamingTask = Task {
             let stream = AIService.shared.chatWithJournal(
                 query: trimmed,
                 conversationHistory: Array(messages.dropLast()),
@@ -185,11 +200,14 @@ struct JournalChatView: View {
 
             do {
                 for try await chunk in stream {
-                    messages[assistantIndex].content += chunk
+                    if let index = messages.firstIndex(where: { $0.id == assistantID }) {
+                        messages[index].content += chunk
+                    }
                 }
             } catch {
-                if messages[assistantIndex].content.isEmpty {
-                    messages[assistantIndex].content = "Sorry, I couldn't process that. Please try again."
+                if let index = messages.firstIndex(where: { $0.id == assistantID }),
+                   messages[index].content.isEmpty {
+                    messages[index].content = "Sorry, I couldn't process that. Please try again."
                 }
             }
 
@@ -221,6 +239,7 @@ private struct MessageBubble: View {
             if message.role == .assistant { Spacer(minLength: 60) }
         }
         .padding(.horizontal)
+        .accessibilityLabel(message.role == .assistant ? "FlowState says: \(message.content)" : message.content)
     }
 }
 
@@ -250,6 +269,7 @@ private struct TypingIndicator: View {
         .clipShape(RoundedRectangle(cornerRadius: 16))
         .shadow(color: .black.opacity(0.05), radius: 2, y: 1)
         .onAppear { animating = true }
+        .accessibilityLabel("FlowState is typing")
     }
 }
 

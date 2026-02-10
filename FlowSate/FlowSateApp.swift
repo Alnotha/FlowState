@@ -34,7 +34,9 @@ struct FlowSateApp: App {
             do {
                 return try ModelContainer(for: schema, configurations: [fallbackConfig])
             } catch {
-                fatalError("Could not create ModelContainer: \(error)")
+                // Last resort: in-memory only so the app doesn't crash
+                let memoryConfig = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+                return try! ModelContainer(for: schema, configurations: [memoryConfig])
             }
         }
     }()

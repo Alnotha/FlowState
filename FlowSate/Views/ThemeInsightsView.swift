@@ -46,6 +46,7 @@ struct ThemeInsightsView: View {
             Text("Your Themes")
                 .font(.largeTitle)
                 .fontWeight(.bold)
+                .accessibilityAddTraits(.isHeader)
 
             Text("Recurring topics and patterns across your journal entries.")
                 .font(.subheadline)
@@ -159,6 +160,8 @@ struct ThemeInsightsView: View {
                 .clipShape(RoundedRectangle(cornerRadius: 16))
                 .shadow(color: .black.opacity(0.05), radius: 8, y: 2)
                 .padding(.horizontal)
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel("\(theme.name), \(theme.frequency) entries, sentiment: \(theme.sentiment.label), trend: \(theme.trend.label)")
             }
         }
     }

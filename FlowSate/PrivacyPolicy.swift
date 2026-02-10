@@ -47,7 +47,7 @@ struct PrivacyPolicyView: View {
 
                 policySection(
                     title: "Third-Party Services",
-                    content: "FlowState does not integrate with any third-party services, SDKs, or APIs. There are no advertising networks, no social media integrations, and no external data processors."
+                    content: "FlowState does not integrate with third-party advertising, analytics, or tracking services. When AI features are enabled, brief summaries of your journal entries are processed through a secure proxy to Anthropic's Claude AI. See the AI Features section below for details."
                 )
 
                 policySection(

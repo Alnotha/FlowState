@@ -39,15 +39,19 @@ final class AuthenticationManager: ObservableObject {
 
         // Verify Apple ID credential is still valid
         let provider = ASAuthorizationAppleIDProvider()
-        provider.getCredentialState(forUserID: userID) { [weak self] state, _ in
+        provider.getCredentialState(forUserID: userID) { [weak self] state, error in
             Task { @MainActor in
+                if error != nil {
+                    // Unable to determine credential state; keep current state
+                    return
+                }
                 switch state {
                 case .authorized:
                     self?.authState = .signedIn(userID: userID)
                 case .revoked, .notFound:
                     self?.signOut()
                 default:
-                    self?.authState = .signedIn(userID: userID)
+                    self?.signOut()
                 }
             }
         }
@@ -56,6 +60,7 @@ final class AuthenticationManager: ObservableObject {
     // MARK: - Sign In
 
     func handleAppleSignIn(credential: ASAuthorizationAppleIDCredential) async {
+        guard authState != .signingIn else { return }
         authState = .signingIn
 
         guard let identityTokenData = credential.identityToken,
@@ -80,11 +85,16 @@ final class AuthenticationManager: ObservableObject {
         do {
             let tokenResponse = try await exchangeTokenWithWorker(request)
 
-            KeychainManager.saveString(key: .jwt, value: tokenResponse.token)
-            KeychainManager.saveString(key: .appleUserID, value: credential.user)
+            let jwtSaved = KeychainManager.saveString(key: .jwt, value: tokenResponse.token)
+            let userIDSaved = KeychainManager.saveString(key: .appleUserID, value: credential.user)
 
             let expiration = Date().addingTimeInterval(TimeInterval(tokenResponse.expiresIn))
-            KeychainManager.saveString(key: .jwtExpiration, value: String(expiration.timeIntervalSince1970))
+            let expirationSaved = KeychainManager.saveString(key: .jwtExpiration, value: String(expiration.timeIntervalSince1970))
+
+            guard jwtSaved, userIDSaved, expirationSaved else {
+                authState = .error("Failed to save credentials")
+                return
+            }
 
             // Store display name if first sign-in (Apple only provides it once)
             if !fullName.isEmpty {
@@ -94,7 +104,7 @@ final class AuthenticationManager: ObservableObject {
 
             authState = .signedIn(userID: credential.user)
         } catch {
-            authState = .error(error.localizedDescription)
+            authState = .error("Sign-in failed. Please try again.")
         }
     }
 
@@ -124,8 +134,7 @@ final class AuthenticationManager: ObservableObject {
         }
 
         guard httpResponse.statusCode == 200 else {
-            let body = String(data: data, encoding: .utf8) ?? "Unknown error"
-            throw AuthError.serverValidationFailed("Status \(httpResponse.statusCode): \(body)")
+            throw AuthError.serverValidationFailed("Server error (status \(httpResponse.statusCode))")
         }
 
         return try JSONDecoder().decode(AuthTokenResponse.self, from: data)
@@ -135,10 +144,9 @@ final class AuthenticationManager: ObservableObject {
 
     var currentToken: String? {
         guard authState.isSignedIn else { return nil }
-        guard !isTokenExpired() else {
-            Task { @MainActor in signOut() }
-            return nil
-        }
+        // If token is expired, return nil. Callers should use refreshTokenIfNeeded()
+        // or handle 401 responses rather than relying on side-effects here.
+        guard !isTokenExpired() else { return nil }
         return KeychainManager.loadString(key: .jwt)
     }
 
@@ -180,10 +188,10 @@ final class AuthenticationManager: ObservableObject {
                   httpResponse.statusCode == 200 else { return false }
 
             let tokenResponse = try JSONDecoder().decode(AuthTokenResponse.self, from: data)
-            KeychainManager.saveString(key: .jwt, value: tokenResponse.token)
+            let jwtSaved = KeychainManager.saveString(key: .jwt, value: tokenResponse.token)
             let expiration = Date().addingTimeInterval(TimeInterval(tokenResponse.expiresIn))
-            KeychainManager.saveString(key: .jwtExpiration, value: String(expiration.timeIntervalSince1970))
-            return true
+            let expSaved = KeychainManager.saveString(key: .jwtExpiration, value: String(expiration.timeIntervalSince1970))
+            return jwtSaved && expSaved
         } catch {
             return false
         }

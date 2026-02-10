@@ -26,8 +26,10 @@ struct JournalEditorView: View {
     @State private var showingPhotoError = false
     @State private var moodSuggestion: MoodSuggestion?
     @State private var moodSuggestionDebounce: Task<Void, Never>?
+    @State private var spellCheckDebounce: Task<Void, Never>?
 
     private let maxPhotos = 10
+    private let maxContentLength = 50_000
 
     private var remainingPhotoSlots: Int {
         maxPhotos - (entry.photoData?.count ?? 0)
@@ -35,168 +37,10 @@ struct JournalEditorView: View {
 
     var body: some View {
         List {
-            // Stats Section
-            Section {
-                HStack {
-                    StatItem(label: "Words", value: "\(entry.wordCount)")
-                    Divider()
-                    StatItem(label: "Characters", value: "\(entry.content.count)")
-                    Divider()
-
-                    // Mood selector
-                    VStack(spacing: 4) {
-                        if let emoji = entry.moodEmoji {
-                            Text(emoji)
-                                .font(.title2)
-                        } else {
-                            Image(systemName: "face.smiling")
-                                .font(.title3)
-                                .foregroundStyle(.secondary)
-                        }
-
-                        Menu {
-                            Button("😊 Happy") { entry.mood = "happy" }
-                            Button("😌 Calm") { entry.mood = "calm" }
-                            Button("😔 Sad") { entry.mood = "sad" }
-                            Button("😤 Frustrated") { entry.mood = "frustrated" }
-                            Button("🤔 Thoughtful") { entry.mood = "thoughtful" }
-                            if entry.mood != nil {
-                                Divider()
-                                Button("Clear", role: .destructive) { entry.mood = nil }
-                            }
-                        } label: {
-                            Text(entry.mood?.capitalized ?? "Mood")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                    .frame(maxWidth: .infinity)
-                }
-                .listRowInsets(EdgeInsets())
-                .padding()
-            } header: {
-                Text(entry.date.formatted(date: .complete, time: .omitted))
-                    .font(.subheadline)
-                    .fontWeight(.semibold)
-                    .foregroundStyle(.primary)
-                    .textCase(nil)
-            }
-
-            // Writing Assistant Section
-            if !misspelledWords.isEmpty {
-                Section {
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 8) {
-                            Image(systemName: "textformat.abc.dottedunderline")
-                                .foregroundStyle(.orange)
-                                .font(.caption)
-
-                            ForEach(misspelledWords, id: \.self) { word in
-                                Button {
-                                    selectedMisspelled = word
-                                    suggestions = getSpellingSuggestions(for: word)
-                                    showingSuggestions = true
-                                } label: {
-                                    Text(word)
-                                        .font(.caption)
-                                        .padding(.horizontal, 8)
-                                        .padding(.vertical, 4)
-                                        .background(Color.orange.opacity(0.15))
-                                        .foregroundStyle(.orange)
-                                        .clipShape(Capsule())
-                                }
-                            }
-                        }
-                        .padding(.horizontal, 4)
-                    }
-                    .listRowInsets(EdgeInsets(top: 8, leading: 12, bottom: 8, trailing: 12))
-                } header: {
-                    Text("Spelling Suggestions")
-                        .font(.caption)
-                        .fontWeight(.medium)
-                        .foregroundStyle(.secondary)
-                        .textCase(nil)
-                }
-            }
-
-            // Text Editor Section
-            Section {
-                TextEditor(text: $entry.content)
-                    .frame(minHeight: 300)
-                    .focused($isEditorFocused)
-                    .scrollContentBackground(.hidden)
-                    .listRowInsets(EdgeInsets())
-                    .onChange(of: entry.content) { _, _ in
-                        entry.updateWordCount()
-                        checkSpelling()
-                        debounceMoodSuggestion()
-                    }
-            } header: {
-                Text("Entry")
-                    .font(.subheadline)
-                    .fontWeight(.semibold)
-                    .foregroundStyle(.primary)
-                    .textCase(nil)
-            }
-
-            // Photos Section
-            Section {
-                if let photoData = entry.photoData, !photoData.isEmpty {
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 12) {
-                            ForEach(photoData.indices, id: \.self) { index in
-                                if let uiImage = UIImage(data: photoData[index]) {
-                                    Image(uiImage: uiImage)
-                                        .resizable()
-                                        .scaledToFill()
-                                        .frame(width: 100, height: 100)
-                                        .clipShape(RoundedRectangle(cornerRadius: 8))
-                                        .contextMenu {
-                                            Button(role: .destructive) {
-                                                removePhoto(at: index)
-                                            } label: {
-                                                Label("Delete", systemImage: "trash")
-                                            }
-                                        }
-                                }
-                            }
-                        }
-                        .padding(.vertical, 8)
-                    }
-                    .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
-                }
-
-                if remainingPhotoSlots > 0 {
-                    Button {
-                        showingPhotosPicker = true
-                    } label: {
-                        HStack {
-                            Image(systemName: "photo.badge.plus")
-                            Text("Add Photos (\(entry.photoData?.count ?? 0)/\(maxPhotos))")
-                        }
-                        .frame(maxWidth: .infinity, alignment: .center)
-                        .foregroundStyle(.blue)
-                    }
-                    .listRowInsets(EdgeInsets())
-                    .padding()
-                } else {
-                    HStack {
-                        Image(systemName: "photo.fill")
-                        Text("Maximum \(maxPhotos) photos reached")
-                    }
-                    .frame(maxWidth: .infinity, alignment: .center)
-                    .foregroundStyle(.secondary)
-                    .font(.subheadline)
-                    .listRowInsets(EdgeInsets())
-                    .padding()
-                }
-            } header: {
-                Text("Photos")
-                    .font(.subheadline)
-                    .fontWeight(.semibold)
-                    .foregroundStyle(.primary)
-                    .textCase(nil)
-            }
+            statsSection
+            spellingSection
+            editorSection
+            photosSection
         }
         .listStyle(.insetGrouped)
         .navigationTitle("Journal Entry")
@@ -207,6 +51,7 @@ struct JournalEditorView: View {
                     dismiss()
                 }
                 .fontWeight(.semibold)
+                .accessibilityLabel("Save entry")
             }
 
             ToolbarItemGroup(placement: .keyboard) {
@@ -261,6 +106,187 @@ struct JournalEditorView: View {
         }
     }
 
+    // MARK: - Extracted Sections
+
+    private var statsSection: some View {
+        Section {
+            HStack {
+                StatItem(label: "Words", value: "\(entry.wordCount)")
+                Divider()
+                StatItem(label: "Characters", value: "\(entry.content.count)")
+                Divider()
+
+                // Mood selector
+                VStack(spacing: 4) {
+                    if let emoji = entry.moodEmoji {
+                        Text(emoji)
+                            .font(.title2)
+                    } else {
+                        Image(systemName: "face.smiling")
+                            .font(.title3)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    Menu {
+                        Button("😊 Happy") { entry.mood = "happy" }
+                        Button("😌 Calm") { entry.mood = "calm" }
+                        Button("😔 Sad") { entry.mood = "sad" }
+                        Button("😤 Frustrated") { entry.mood = "frustrated" }
+                        Button("🤔 Thoughtful") { entry.mood = "thoughtful" }
+                        if entry.mood != nil {
+                            Divider()
+                            Button("Clear", role: .destructive) { entry.mood = nil }
+                        }
+                    } label: {
+                        Text(entry.mood?.capitalized ?? "Mood")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    .accessibilityLabel("Select mood")
+                    .accessibilityHint("Choose how you're feeling")
+                }
+                .frame(maxWidth: .infinity)
+            }
+            .listRowInsets(EdgeInsets())
+            .padding()
+        } header: {
+            Text(entry.date.formatted(date: .complete, time: .omitted))
+                .font(.subheadline)
+                .fontWeight(.semibold)
+                .foregroundStyle(.primary)
+                .textCase(nil)
+        }
+    }
+
+    @ViewBuilder
+    private var spellingSection: some View {
+        if !misspelledWords.isEmpty {
+            Section {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "textformat.abc.dottedunderline")
+                            .foregroundStyle(.orange)
+                            .font(.caption)
+
+                        ForEach(misspelledWords, id: \.self) { word in
+                            Button {
+                                selectedMisspelled = word
+                                suggestions = getSpellingSuggestions(for: word)
+                                showingSuggestions = true
+                            } label: {
+                                Text(word)
+                                    .font(.caption)
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 4)
+                                    .background(Color.orange.opacity(0.15))
+                                    .foregroundStyle(.orange)
+                                    .clipShape(Capsule())
+                            }
+                            .accessibilityLabel("Misspelled: \(word)")
+                            .accessibilityHint("Double tap to replace misspelled word")
+                        }
+                    }
+                    .padding(.horizontal, 4)
+                }
+                .listRowInsets(EdgeInsets(top: 8, leading: 12, bottom: 8, trailing: 12))
+            } header: {
+                Text("Spelling Suggestions")
+                    .font(.caption)
+                    .fontWeight(.medium)
+                    .foregroundStyle(.secondary)
+                    .textCase(nil)
+            }
+        }
+    }
+
+    private var editorSection: some View {
+        Section {
+            TextEditor(text: $entry.content)
+                .frame(minHeight: 300)
+                .focused($isEditorFocused)
+                .scrollContentBackground(.hidden)
+                .listRowInsets(EdgeInsets())
+                .accessibilityLabel("Journal entry text")
+                .onChange(of: entry.content) { _, _ in
+                    if entry.content.count > maxContentLength {
+                        entry.content = String(entry.content.prefix(maxContentLength))
+                    }
+                    entry.updateWordCount()
+                    debounceSpellCheck()
+                    debounceMoodSuggestion()
+                }
+        } header: {
+            Text("Entry")
+                .font(.subheadline)
+                .fontWeight(.semibold)
+                .foregroundStyle(.primary)
+                .textCase(nil)
+        }
+    }
+
+    private var photosSection: some View {
+        Section {
+            if let photoData = entry.photoData, !photoData.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 12) {
+                        ForEach(photoData.indices, id: \.self) { index in
+                            if let uiImage = UIImage(data: photoData[index]) {
+                                Image(uiImage: uiImage)
+                                    .resizable()
+                                    .scaledToFill()
+                                    .frame(width: 100, height: 100)
+                                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                                    .accessibilityLabel("Photo \(index + 1)")
+                                    .accessibilityHint("Double tap to view options")
+                                    .contextMenu {
+                                        Button(role: .destructive) {
+                                            removePhoto(at: index)
+                                        } label: {
+                                            Label("Delete", systemImage: "trash")
+                                        }
+                                    }
+                            }
+                        }
+                    }
+                    .padding(.vertical, 8)
+                }
+                .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
+            }
+
+            if remainingPhotoSlots > 0 {
+                Button {
+                    showingPhotosPicker = true
+                } label: {
+                    HStack {
+                        Image(systemName: "photo.badge.plus")
+                        Text("Add Photos (\(entry.photoData?.count ?? 0)/\(maxPhotos))")
+                    }
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .foregroundStyle(.blue)
+                }
+                .accessibilityLabel("Add photos")
+                .listRowInsets(EdgeInsets())
+                .padding()
+            } else {
+                HStack {
+                    Image(systemName: "photo.fill")
+                    Text("Maximum \(maxPhotos) photos reached")
+                }
+                .frame(maxWidth: .infinity, alignment: .center)
+                .foregroundStyle(.secondary)
+                .font(.subheadline)
+                .listRowInsets(EdgeInsets())
+                .padding()
+            }
+        } header: {
+            Text("Photos")
+                .font(.subheadline)
+                .fontWeight(.semibold)
+                .foregroundStyle(.primary)
+                .textCase(nil)
+        }
+    }
+
     // MARK: - Spell Check
 
     private func checkSpelling() {
@@ -304,7 +330,13 @@ struct JournalEditorView: View {
     }
 
     private func replaceWord(_ oldWord: String, with newWord: String) {
-        entry.content = entry.content.replacingOccurrences(of: oldWord, with: newWord)
+        if let regex = try? NSRegularExpression(pattern: "\\b\(NSRegularExpression.escapedPattern(for: oldWord))\\b", options: []) {
+            entry.content = regex.stringByReplacingMatches(
+                in: entry.content,
+                range: NSRange(entry.content.startIndex..., in: entry.content),
+                withTemplate: newWord
+            )
+        }
         checkSpelling()
     }
 
@@ -318,8 +350,17 @@ struct JournalEditorView: View {
             guard photoDataArray.count < maxPhotos else { break }
 
             do {
-                if let data = try await photo.loadTransferable(type: Data.self) {
-                    photoDataArray.append(data)
+                if let data = try await photo.loadTransferable(type: Data.self),
+                   let uiImage = UIImage(data: data) {
+                    // Resize to max 2048px on longest side
+                    let maxDimension: CGFloat = 2048
+                    let scale = min(maxDimension / max(uiImage.size.width, uiImage.size.height), 1.0)
+                    let newSize = CGSize(width: uiImage.size.width * scale, height: uiImage.size.height * scale)
+                    let renderer = UIGraphicsImageRenderer(size: newSize)
+                    let resized = renderer.image { _ in uiImage.draw(in: CGRect(origin: .zero, size: newSize)) }
+                    if let compressed = resized.jpegData(compressionQuality: 0.7) {
+                        photoDataArray.append(compressed)
+                    }
                 } else {
                     failedCount += 1
                 }
@@ -343,6 +384,17 @@ struct JournalEditorView: View {
         entry.photoData?.remove(at: index)
         if entry.photoData?.isEmpty == true {
             entry.photoData = nil
+        }
+    }
+
+    // MARK: - Debounced Spell Check
+
+    private func debounceSpellCheck() {
+        spellCheckDebounce?.cancel()
+        spellCheckDebounce = Task {
+            try? await Task.sleep(for: .seconds(1))
+            guard !Task.isCancelled else { return }
+            checkSpelling()
         }
     }
 
@@ -375,6 +427,8 @@ struct StatItem: View {
                 .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(value) \(label)")
     }
 }
 

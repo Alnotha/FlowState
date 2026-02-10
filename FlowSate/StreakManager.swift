@@ -52,7 +52,7 @@ struct StreakManager {
         var current = 1
 
         for i in 1..<sorted.count {
-            let expected = calendar.date(byAdding: .day, value: 1, to: sorted[i - 1])!
+            guard let expected = calendar.date(byAdding: .day, value: 1, to: sorted[i - 1]) else { continue }
             if calendar.isDate(sorted[i], inSameDayAs: expected) {
                 current += 1
                 longest = max(longest, current)
@@ -134,6 +134,8 @@ struct StreakCardView: View {
                         .foregroundStyle(.secondary)
                 }
                 .frame(maxWidth: .infinity)
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel("Current streak: \(currentStreak) days")
 
                 Divider()
                     .frame(height: 60)
@@ -151,6 +153,8 @@ struct StreakCardView: View {
                         .foregroundStyle(.secondary)
                 }
                 .frame(maxWidth: .infinity)
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel("Longest streak: \(longestStreak) days")
             }
 
             Divider()
@@ -216,6 +220,8 @@ private struct WeekDotRow: View {
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                     }
+                    .accessibilityElement(children: .combine)
+                    .accessibilityLabel("\(day.label), \(day.journaled ? "journaled" : "no entry")")
                 }
             }
         }
