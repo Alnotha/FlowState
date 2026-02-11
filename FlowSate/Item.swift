@@ -26,7 +26,7 @@ final class JournalEntry {
         self.content = content
         self.mood = mood
         self.photoData = photoData
-        self.wordCount = content.split(separator: " ").count
+        self.wordCount = content.wordCount
     }
     
     // Computed property for formatted date
@@ -44,19 +44,35 @@ final class JournalEntry {
     
     // Update word count when content changes
     func updateWordCount() {
-        wordCount = content.isEmpty ? 0 : content.split(separator: " ").count
+        wordCount = content.wordCount
     }
 
     // Emoji representation of the mood
     var moodEmoji: String? {
         guard let mood = mood else { return nil }
-        switch mood.lowercased() {
-        case "happy": return "😊"
-        case "calm": return "😌"
-        case "sad": return "😔"
-        case "frustrated": return "😤"
-        case "thoughtful": return "🤔"
-        default: return "😐"
+        return FlowSate.moodEmoji(for: mood)
+    }
+}
+
+// MARK: - Shared Helpers
+
+func moodEmoji(for mood: String) -> String {
+    switch mood.lowercased() {
+    case "happy": return "😊"
+    case "calm": return "😌"
+    case "sad": return "😔"
+    case "frustrated": return "😤"
+    case "thoughtful": return "🤔"
+    default: return "😐"
+    }
+}
+
+extension String {
+    var wordCount: Int {
+        var count = 0
+        enumerateSubstrings(in: startIndex..., options: [.byWords, .substringNotRequired]) { _, _, _, _ in
+            count += 1
         }
+        return count
     }
 }

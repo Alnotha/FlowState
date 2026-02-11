@@ -15,17 +15,6 @@ struct MoodSuggestionBanner: View {
     @State private var isVisible = false
     @State private var autoDismissTask: Task<Void, Never>?
 
-    private func moodEmoji(for mood: String) -> String {
-        switch mood.lowercased() {
-        case "happy": return "😊"
-        case "calm": return "😌"
-        case "sad": return "😔"
-        case "frustrated": return "😤"
-        case "thoughtful": return "🤔"
-        default: return "😐"
-        }
-    }
-
     var body: some View {
         if isVisible {
             VStack(spacing: 10) {

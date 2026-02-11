@@ -13,6 +13,8 @@ struct EntryLibraryView: View {
     @Query(sort: \JournalEntry.date, order: .reverse) private var entries: [JournalEntry]
     @State private var searchText = ""
     @State private var showingExportSheet = false
+    @State private var entryToDelete: JournalEntry?
+    @State private var showingDeleteConfirmation = false
 
     private var filteredEntries: [JournalEntry] {
         if searchText.isEmpty {
@@ -55,7 +57,10 @@ struct EntryLibraryView: View {
                                 }
                             }
                             .onDelete { indexSet in
-                                deleteEntries(in: section.entries, at: indexSet)
+                                if let index = indexSet.first {
+                                    entryToDelete = section.entries[index]
+                                    showingDeleteConfirmation = true
+                                }
                             }
                         }
                     }
@@ -79,6 +84,17 @@ struct EntryLibraryView: View {
         }
         .sheet(isPresented: $showingExportSheet) {
             ExportSheet(entries: filteredEntries.isEmpty ? entries : filteredEntries)
+        }
+        .confirmationDialog(
+            "Delete Entry?",
+            isPresented: $showingDeleteConfirmation,
+            presenting: entryToDelete
+        ) { entry in
+            Button("Delete", role: .destructive) {
+                modelContext.delete(entry)
+            }
+        } message: { entry in
+            Text("This will permanently delete your entry from \(entry.formattedDate). This cannot be undone.")
         }
     }
 

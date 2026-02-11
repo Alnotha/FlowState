@@ -207,7 +207,24 @@ struct JournalChatView: View {
             } catch {
                 if let index = messages.firstIndex(where: { $0.id == assistantID }),
                    messages[index].content.isEmpty {
-                    messages[index].content = "Sorry, I couldn't process that. Please try again."
+                    let errorMessage: String
+                    if let apiError = error as? ClaudeAPIError {
+                        switch apiError {
+                        case .unauthorized:
+                            errorMessage = "Your session has expired. Please sign in again in Settings."
+                        case .rateLimited:
+                            errorMessage = "Too many messages sent. Please wait a moment and try again."
+                        case .noWorkerURL:
+                            errorMessage = "AI is not configured. Set up your Worker URL in Settings > AI Features."
+                        case .overloaded:
+                            errorMessage = "The AI service is busy right now. Please try again shortly."
+                        default:
+                            errorMessage = "Something went wrong. Please try again."
+                        }
+                    } else {
+                        errorMessage = "Connection error. Check your internet and try again."
+                    }
+                    messages[index].content = errorMessage
                 }
             }
 

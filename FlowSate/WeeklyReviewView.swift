@@ -29,17 +29,6 @@ struct WeeklyReviewView: View {
         return allEntries.filter { $0.date >= weekStart && $0.date < endOfSaturday }
     }
 
-    private func moodEmoji(for mood: String) -> String {
-        switch mood.lowercased() {
-        case "happy": return "😊"
-        case "calm": return "😌"
-        case "sad": return "😔"
-        case "frustrated": return "😤"
-        case "thoughtful": return "🤔"
-        default: return "😐"
-        }
-    }
-
     private func moodColor(for mood: String) -> Color {
         switch mood.lowercased() {
         case "happy": return .yellow
@@ -151,7 +140,7 @@ struct WeeklyReviewView: View {
                 weekHighlightsSection
 
                 // Theme Insights Link
-                if AIService.shared.isEnabled && AIService.shared.themeDetectionEnabled {
+                if AIService.shared.canUseAI && AIService.shared.themeDetectionEnabled {
                     NavigationLink(destination: ThemeInsightsView()) {
                         HStack(spacing: 12) {
                             Image(systemName: "tag.fill")

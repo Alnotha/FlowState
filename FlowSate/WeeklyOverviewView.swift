@@ -217,17 +217,6 @@ struct WeeklyOverviewView: View {
         .navigationBarTitleDisplayMode(.inline)
     }
 
-    private func moodEmoji(for mood: String) -> String {
-        switch mood.lowercased() {
-        case "happy": return "😊"
-        case "calm": return "😌"
-        case "sad": return "😔"
-        case "frustrated": return "😤"
-        case "thoughtful": return "🤔"
-        default: return "😐"
-        }
-    }
-
     private func moodColor(for mood: String) -> Color {
         switch mood.lowercased() {
         case "happy": return .yellow
