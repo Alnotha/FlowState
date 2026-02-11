@@ -119,47 +119,44 @@ struct StreakCardView: View {
     private var longestStreak: Int { StreakManager.longestStreak(from: entries) }
 
     var body: some View {
-        VStack(spacing: 20) {
-            HStack(spacing: 0) {
-                VStack(spacing: 6) {
-                    Image(systemName: "flame.fill")
-                        .font(.system(size: 28))
-                        .foregroundStyle(.orange.gradient)
-
-                    Text("\(currentStreak)")
-                        .font(.system(size: 34, weight: .bold, design: .rounded))
-
-                    Text("Current Streak")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                .frame(maxWidth: .infinity)
-                .accessibilityElement(children: .combine)
-                .accessibilityLabel("Current streak: \(currentStreak) days")
-
-                Divider()
-                    .frame(height: 60)
-
-                VStack(spacing: 6) {
-                    Image(systemName: "trophy.fill")
-                        .font(.system(size: 28))
-                        .foregroundStyle(.yellow.gradient)
-
-                    Text("\(longestStreak)")
-                        .font(.system(size: 34, weight: .bold, design: .rounded))
-
-                    Text("Longest Streak")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                .frame(maxWidth: .infinity)
-                .accessibilityElement(children: .combine)
-                .accessibilityLabel("Longest streak: \(longestStreak) days")
-            }
+        VStack(spacing: 12) {
+            WeekDotRow(entries: entries)
 
             Divider()
 
-            WeekDotRow(entries: entries)
+            HStack(spacing: 20) {
+                HStack(spacing: 6) {
+                    Image(systemName: "flame.fill")
+                        .font(.system(size: 14))
+                        .foregroundStyle(.orange.gradient)
+
+                    Text("\(currentStreak)")
+                        .font(.system(size: 16, weight: .semibold, design: .rounded))
+
+                    Text("day streak")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel("Current streak: \(currentStreak) days")
+
+                Spacer()
+
+                HStack(spacing: 6) {
+                    Image(systemName: "trophy.fill")
+                        .font(.system(size: 14))
+                        .foregroundStyle(.yellow.gradient)
+
+                    Text("\(longestStreak)")
+                        .font(.system(size: 16, weight: .semibold, design: .rounded))
+
+                    Text("best")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel("Longest streak: \(longestStreak) days")
+            }
         }
         .padding()
         .background(Color(.systemBackground))
@@ -197,32 +194,27 @@ private struct WeekDotRow: View {
     }
 
     var body: some View {
-        VStack(spacing: 10) {
-            Text("This Week")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+        HStack(spacing: 8) {
+            ForEach(Array(weekDays.enumerated()), id: \.offset) { _, day in
+                VStack(spacing: 4) {
+                    Text(day.label)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
 
-            HStack(spacing: 12) {
-                ForEach(Array(weekDays.enumerated()), id: \.offset) { _, day in
-                    VStack(spacing: 6) {
-                        Circle()
-                            .fill(day.journaled ? Color.orange : Color.clear)
-                            .overlay(
-                                Circle()
-                                    .strokeBorder(
-                                        day.journaled ? Color.orange : Color.secondary.opacity(0.3),
-                                        lineWidth: 2
-                                    )
-                            )
-                            .frame(width: 28, height: 28)
-
-                        Text(day.label)
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                    }
-                    .accessibilityElement(children: .combine)
-                    .accessibilityLabel("\(day.label), \(day.journaled ? "journaled" : "no entry")")
+                    Circle()
+                        .fill(day.journaled ? Color.orange : Color.clear)
+                        .overlay(
+                            Circle()
+                                .strokeBorder(
+                                    day.journaled ? Color.orange : Color.secondary.opacity(0.3),
+                                    lineWidth: 2
+                                )
+                        )
+                        .frame(width: 24, height: 24)
                 }
+                .frame(maxWidth: .infinity)
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel("\(day.label), \(day.journaled ? "journaled" : "no entry")")
             }
         }
     }

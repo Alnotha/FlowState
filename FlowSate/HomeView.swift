@@ -16,6 +16,7 @@ struct HomeView: View {
     @State private var showingChat = false
     @State private var nudge: EmotionalNudge?
     @State private var showNudge = true
+    @State private var detectedThemes: [DetectedTheme]?
 
     private var todayEntry: JournalEntry? {
         entries.first { Calendar.current.isDateInToday($0.date) }
@@ -89,6 +90,12 @@ struct HomeView: View {
                                     }
                             }
                         }
+                    }
+
+                    // Themes & Patterns (shown after 14+ entries)
+                    if AIService.shared.isEnabled && entries.count >= 14 {
+                        ThemesPreviewCard(themes: detectedThemes)
+                            .padding(.horizontal)
                     }
 
                     // Recent entries
@@ -179,11 +186,23 @@ struct HomeView: View {
                     .modelContainer(for: JournalEntry.self)
             }
             .task {
-                nudge = await AIService.shared.generateNudge(
-                    recentEntries: Array(entries.prefix(5)),
-                    currentStreak: StreakManager.currentStreak(from: entries),
-                    totalEntries: entries.count
-                )
+                if entries.count >= 14 {
+                    async let nudgeTask = AIService.shared.generateNudge(
+                        recentEntries: Array(entries.prefix(5)),
+                        currentStreak: StreakManager.currentStreak(from: entries),
+                        totalEntries: entries.count
+                    )
+                    async let themesTask = AIService.shared.detectThemes(entries: entries)
+
+                    nudge = await nudgeTask
+                    detectedThemes = await themesTask
+                } else {
+                    nudge = await AIService.shared.generateNudge(
+                        recentEntries: Array(entries.prefix(5)),
+                        currentStreak: StreakManager.currentStreak(from: entries),
+                        totalEntries: entries.count
+                    )
+                }
             }
         }
     }
@@ -363,6 +382,86 @@ struct EntryRowCard: View {
         case "thoughtful": return "🤔"
         default: return "😐"
         }
+    }
+}
+
+// MARK: - Themes Preview Card
+
+struct ThemesPreviewCard: View {
+    let themes: [DetectedTheme]?
+
+    var body: some View {
+        NavigationLink(destination: ThemeInsightsView()) {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack {
+                    Label("Themes & Patterns", systemImage: "sparkles")
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                        .foregroundStyle(.purple)
+
+                    Spacer()
+
+                    Image(systemName: "chevron.right")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                if let themes, !themes.isEmpty {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("What you've been writing about")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 8) {
+                                ForEach(themes.prefix(4)) { theme in
+                                    HStack(spacing: 4) {
+                                        Circle()
+                                            .fill(theme.sentiment.color)
+                                            .frame(width: 6, height: 6)
+                                        Text(theme.name)
+                                            .font(.caption)
+                                            .fontWeight(.medium)
+                                    }
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 6)
+                                    .background(theme.sentiment.color.opacity(0.1))
+                                    .clipShape(Capsule())
+                                }
+                            }
+                        }
+
+                        if let topTheme = themes.first {
+                            HStack(spacing: 6) {
+                                Image(systemName: topTheme.trend.icon)
+                                    .font(.caption2)
+                                    .foregroundStyle(topTheme.sentiment.color)
+
+                                Text("\(topTheme.name) is \(topTheme.trend.label.lowercased()) in your writing")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                } else {
+                    HStack(spacing: 8) {
+                        ProgressView()
+                            .scaleEffect(0.8)
+
+                        Text("Analyzing your journal...")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+            .padding()
+            .background(Color(.systemBackground))
+            .clipShape(RoundedRectangle(cornerRadius: 16))
+            .shadow(color: .black.opacity(0.05), radius: 8, y: 2)
+        }
+        .buttonStyle(.plain)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Themes and patterns. \(themes?.first.map { "Top theme: \($0.name)" } ?? "Analyzing your journal"). Tap to see more.")
     }
 }
 
