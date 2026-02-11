@@ -8,7 +8,6 @@
 import SwiftUI
 import SwiftData
 import PhotosUI
-import NaturalLanguage
 
 struct JournalEditorView: View {
     @Environment(\.modelContext) private var modelContext
@@ -18,15 +17,10 @@ struct JournalEditorView: View {
     @State private var selectedPhotos: [PhotosPickerItem] = []
     @State private var showingPhotosPicker = false
     @FocusState private var isEditorFocused: Bool
-    @State private var misspelledWords: [String] = []
-    @State private var showingSuggestions = false
-    @State private var selectedMisspelled: String = ""
-    @State private var suggestions: [String] = []
     @State private var photoLoadError: String?
     @State private var showingPhotoError = false
     @State private var moodSuggestion: MoodSuggestion?
     @State private var moodSuggestionDebounce: Task<Void, Never>?
-    @State private var spellCheckDebounce: Task<Void, Never>?
 
     private let maxPhotos = 10
     private let maxContentLength = 50_000
@@ -38,7 +32,6 @@ struct JournalEditorView: View {
     var body: some View {
         List {
             statsSection
-            spellingSection
             editorSection
             photosSection
         }
@@ -85,19 +78,7 @@ struct JournalEditorView: View {
         .onAppear {
             if entry.content.isEmpty {
                 isEditorFocused = true
-            } else {
-                checkSpelling()
             }
-        }
-        .alert("Spelling Suggestions", isPresented: $showingSuggestions) {
-            ForEach(suggestions, id: \.self) { suggestion in
-                Button(suggestion) {
-                    replaceWord(selectedMisspelled, with: suggestion)
-                }
-            }
-            Button("Ignore", role: .cancel) { }
-        } message: {
-            Text("Suggestions for \"\(selectedMisspelled)\"")
         }
         .alert("Photo Error", isPresented: $showingPhotoError) {
             Button("OK", role: .cancel) { }
@@ -158,47 +139,6 @@ struct JournalEditorView: View {
         }
     }
 
-    @ViewBuilder
-    private var spellingSection: some View {
-        if !misspelledWords.isEmpty {
-            Section {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 8) {
-                        Image(systemName: "textformat.abc.dottedunderline")
-                            .foregroundStyle(.orange)
-                            .font(.caption)
-
-                        ForEach(misspelledWords, id: \.self) { word in
-                            Button {
-                                selectedMisspelled = word
-                                suggestions = getSpellingSuggestions(for: word)
-                                showingSuggestions = true
-                            } label: {
-                                Text(word)
-                                    .font(.caption)
-                                    .padding(.horizontal, 8)
-                                    .padding(.vertical, 4)
-                                    .background(Color.orange.opacity(0.15))
-                                    .foregroundStyle(.orange)
-                                    .clipShape(Capsule())
-                            }
-                            .accessibilityLabel("Misspelled: \(word)")
-                            .accessibilityHint("Double tap to replace misspelled word")
-                        }
-                    }
-                    .padding(.horizontal, 4)
-                }
-                .listRowInsets(EdgeInsets(top: 8, leading: 12, bottom: 8, trailing: 12))
-            } header: {
-                Text("Spelling Suggestions")
-                    .font(.caption)
-                    .fontWeight(.medium)
-                    .foregroundStyle(.secondary)
-                    .textCase(nil)
-            }
-        }
-    }
-
     private var editorSection: some View {
         Section {
             TextEditor(text: $entry.content)
@@ -212,7 +152,6 @@ struct JournalEditorView: View {
                         entry.content = String(entry.content.prefix(maxContentLength))
                     }
                     entry.updateWordCount()
-                    debounceSpellCheck()
                     debounceMoodSuggestion()
                 }
         } header: {
@@ -287,59 +226,6 @@ struct JournalEditorView: View {
         }
     }
 
-    // MARK: - Spell Check
-
-    private func checkSpelling() {
-        let checker = UITextChecker()
-        let text = entry.content
-        let range = NSRange(text.startIndex..., in: text)
-        var misspelled: [String] = []
-        var searchRange = NSRange(location: 0, length: range.length)
-
-        while searchRange.location < range.length {
-            let misspelledRange = checker.rangeOfMisspelledWord(
-                in: text,
-                range: range,
-                startingAt: searchRange.location,
-                wrap: false,
-                language: "en"
-            )
-
-            if misspelledRange.location == NSNotFound {
-                break
-            }
-
-            if let swiftRange = Range(misspelledRange, in: text) {
-                let word = String(text[swiftRange])
-                if !misspelled.contains(word) {
-                    misspelled.append(word)
-                }
-            }
-
-            searchRange.location = misspelledRange.location + misspelledRange.length
-        }
-
-        misspelledWords = Array(misspelled.prefix(5))
-    }
-
-    private func getSpellingSuggestions(for word: String) -> [String] {
-        let checker = UITextChecker()
-        let range = NSRange(word.startIndex..., in: word)
-        let suggestions = checker.guesses(forWordRange: range, in: word, language: "en") ?? []
-        return Array(suggestions.prefix(4))
-    }
-
-    private func replaceWord(_ oldWord: String, with newWord: String) {
-        if let regex = try? NSRegularExpression(pattern: "\\b\(NSRegularExpression.escapedPattern(for: oldWord))\\b", options: []) {
-            entry.content = regex.stringByReplacingMatches(
-                in: entry.content,
-                range: NSRange(entry.content.startIndex..., in: entry.content),
-                withTemplate: newWord
-            )
-        }
-        checkSpelling()
-    }
-
     // MARK: - Photos
 
     private func loadPhotos(_ photos: [PhotosPickerItem]) async {
@@ -384,17 +270,6 @@ struct JournalEditorView: View {
         entry.photoData?.remove(at: index)
         if entry.photoData?.isEmpty == true {
             entry.photoData = nil
-        }
-    }
-
-    // MARK: - Debounced Spell Check
-
-    private func debounceSpellCheck() {
-        spellCheckDebounce?.cancel()
-        spellCheckDebounce = Task {
-            try? await Task.sleep(for: .seconds(1))
-            guard !Task.isCancelled else { return }
-            checkSpelling()
         }
     }
 
