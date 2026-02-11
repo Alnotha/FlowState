@@ -25,10 +25,18 @@ nonisolated enum AuthState: Equatable, Sendable {
 
 nonisolated struct AppleAuthRequest: Codable, Sendable {
     let identityToken: String
-    let authorizationCode: String?
     let userIdentifier: String
     let email: String?
     let fullName: String?
+    let nonce: String?
+    let nonceSignature: String?
+    let nonceExpiresAt: Int?
+}
+
+nonisolated struct NonceData: Sendable {
+    let nonce: String
+    let signature: String
+    let expiresAt: Int
 }
 
 nonisolated struct AuthTokenResponse: Codable, Sendable {

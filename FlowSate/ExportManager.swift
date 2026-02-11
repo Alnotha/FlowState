@@ -36,17 +36,6 @@ enum ExportFormat: String, CaseIterable, Identifiable {
 
 final class ExportManager {
 
-    private static func moodEmoji(for mood: String) -> String {
-        switch mood.lowercased() {
-        case "happy": return "😊"
-        case "calm": return "😌"
-        case "sad": return "😔"
-        case "frustrated": return "😤"
-        case "thoughtful": return "🤔"
-        default: return "😐"
-        }
-    }
-
     func exportAsText(entries: [JournalEntry]) -> String {
         guard !entries.isEmpty else {
             return "FlowState Journal\n\nNo entries to export."
@@ -65,7 +54,7 @@ final class ExportManager {
             lines.append(String(repeating: "-", count: 30))
 
             if let mood = entry.mood {
-                lines.append("Mood: \(Self.moodEmoji(for: mood)) \(mood.capitalized)")
+                lines.append("Mood: \(moodEmoji(for: mood)) \(mood.capitalized)")
             }
 
             lines.append("Words: \(entry.wordCount)")
@@ -104,7 +93,7 @@ final class ExportManager {
 
             if let mood = entry.mood {
                 dict["mood"] = mood
-                dict["moodEmoji"] = Self.moodEmoji(for: mood)
+                dict["moodEmoji"] = moodEmoji(for: mood)
             }
 
             if let photoData = entry.photoData {

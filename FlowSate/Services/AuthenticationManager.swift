@@ -59,7 +59,7 @@ final class AuthenticationManager: ObservableObject {
 
     // MARK: - Sign In
 
-    func handleAppleSignIn(credential: ASAuthorizationAppleIDCredential) async {
+    func handleAppleSignIn(credential: ASAuthorizationAppleIDCredential, nonceData: NonceData? = nil) async {
         guard authState != .signingIn else { return }
         authState = .signingIn
 
@@ -69,17 +69,18 @@ final class AuthenticationManager: ObservableObject {
             return
         }
 
-        let authCode = credential.authorizationCode.flatMap { String(data: $0, encoding: .utf8) }
         let fullName = [credential.fullName?.givenName, credential.fullName?.familyName]
             .compactMap { $0 }
             .joined(separator: " ")
 
         let request = AppleAuthRequest(
             identityToken: identityToken,
-            authorizationCode: authCode,
             userIdentifier: credential.user,
             email: credential.email,
-            fullName: fullName.isEmpty ? nil : fullName
+            fullName: fullName.isEmpty ? nil : fullName,
+            nonce: nonceData?.nonce,
+            nonceSignature: nonceData?.signature,
+            nonceExpiresAt: nonceData?.expiresAt
         )
 
         do {
@@ -106,6 +107,39 @@ final class AuthenticationManager: ObservableObject {
         } catch {
             authState = .error("Sign-in failed. Please try again.")
         }
+    }
+
+    // MARK: - Nonce
+
+    func fetchNonce() async throws -> NonceData {
+        let workerURL = CloudflareClient.workerURL
+        guard !workerURL.isEmpty else {
+            throw AuthError.serverValidationFailed("Worker URL not configured")
+        }
+
+        let urlString = workerURL.hasSuffix("/") ? workerURL + "auth/nonce" : workerURL + "/auth/nonce"
+        guard let url = URL(string: urlString) else {
+            throw AuthError.serverValidationFailed("Invalid URL")
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("alnotha.FlowSate", forHTTPHeaderField: "X-App-Bundle")
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+            throw AuthError.serverValidationFailed("Failed to get nonce")
+        }
+
+        struct NonceResponse: Codable {
+            let nonce: String
+            let expiresAt: Int
+            let signature: String
+        }
+
+        let nonceResponse = try JSONDecoder().decode(NonceResponse.self, from: data)
+        return NonceData(nonce: nonceResponse.nonce, signature: nonceResponse.signature, expiresAt: nonceResponse.expiresAt)
     }
 
     // MARK: - Token Exchange
@@ -184,8 +218,12 @@ final class AuthenticationManager: ObservableObject {
             request.httpBody = try JSONEncoder().encode(AuthRefreshRequest(token: jwt))
 
             let (data, response) = try await URLSession.shared.data(for: request)
-            guard let httpResponse = response as? HTTPURLResponse,
-                  httpResponse.statusCode == 200 else { return false }
+            guard let httpResponse = response as? HTTPURLResponse else { return false }
+            if httpResponse.statusCode == 401 {
+                signOut()
+                return false
+            }
+            guard httpResponse.statusCode == 200 else { return false }
 
             let tokenResponse = try JSONDecoder().decode(AuthTokenResponse.self, from: data)
             let jwtSaved = KeychainManager.saveString(key: .jwt, value: tokenResponse.token)

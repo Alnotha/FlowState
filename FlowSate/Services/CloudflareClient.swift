@@ -186,7 +186,12 @@ actor CloudflareClient {
     // MARK: - Auth
 
     private func authorizationToken() -> String? {
-        KeychainManager.loadString(key: .jwt)
+        guard let expirationString = KeychainManager.loadString(key: .jwtExpiration),
+              let expirationTimestamp = Double(expirationString),
+              Date().timeIntervalSince1970 < (expirationTimestamp - 60) else {
+            return nil
+        }
+        return KeychainManager.loadString(key: .jwt)
     }
 
     // MARK: - Helpers

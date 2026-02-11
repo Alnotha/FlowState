@@ -75,7 +75,7 @@ struct HomeView: View {
                                     showingEditor = true
                                 }
                         } else {
-                            if AIService.shared.isEnabled && AIService.shared.smartPromptsEnabled {
+                            if AIService.shared.canUseAI && AIService.shared.smartPromptsEnabled {
                                 SmartPromptCard(
                                     recentEntries: entries,
                                     onStartWriting: { _ in
@@ -94,7 +94,7 @@ struct HomeView: View {
                     }
 
                     // Themes & Patterns (shown after 14+ entries)
-                    if AIService.shared.isEnabled && entries.count >= 14 {
+                    if AIService.shared.canUseAI && entries.count >= 14 {
                         ThemesPreviewCard(themes: detectedThemes)
                             .padding(.horizontal)
                     }
@@ -146,7 +146,7 @@ struct HomeView: View {
 
                 ToolbarItem(placement: .topBarTrailing) {
                     HStack(spacing: 16) {
-                        if AIService.shared.isEnabled && AIService.shared.chatEnabled {
+                        if AIService.shared.canUseAI && AIService.shared.chatEnabled {
                             Button {
                                 showingChat = true
                             } label: {
@@ -170,7 +170,11 @@ struct HomeView: View {
                     }
                 }
             }
-            .sheet(isPresented: $showingEditor) {
+            .sheet(isPresented: $showingEditor, onDismiss: {
+                if let entry = todayEntry, entry.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    modelContext.delete(entry)
+                }
+            }) {
                 if let entry = todayEntry {
                     NavigationStack {
                         JournalEditorView(entry: entry)
@@ -284,17 +288,6 @@ struct TodayEntryCard: View {
         .accessibilityLabel("Today's journal entry, \(entry.wordCount) words\(entry.mood.map { ", mood: \($0)" } ?? ""). \(entry.content.isEmpty ? "Tap to start writing" : String(entry.content.prefix(100)))")
         .accessibilityHint("Double tap to edit entry")
     }
-
-    private func moodEmoji(for mood: String) -> String {
-        switch mood.lowercased() {
-        case "happy": return "😊"
-        case "calm": return "😌"
-        case "sad": return "😔"
-        case "frustrated": return "😤"
-        case "thoughtful": return "🤔"
-        default: return "😐"
-        }
-    }
 }
 
 struct EmptyEntryCard: View {
@@ -373,17 +366,6 @@ struct EntryRowCard: View {
         .clipShape(RoundedRectangle(cornerRadius: 12))
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(entry.formattedDate)\(entry.mood.map { ", mood: \($0)" } ?? ""), \(entry.wordCount) words. \(entry.content.isEmpty ? "Empty entry" : String(entry.content.prefix(80)))")
-    }
-
-    private func moodEmoji(for mood: String) -> String {
-        switch mood.lowercased() {
-        case "happy": return "😊"
-        case "calm": return "😌"
-        case "sad": return "😔"
-        case "frustrated": return "😤"
-        case "thoughtful": return "🤔"
-        default: return "😐"
-        }
     }
 }
 

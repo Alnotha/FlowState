@@ -7,6 +7,7 @@
 
 import SwiftUI
 import AuthenticationServices
+import CryptoKit
 
 struct AISettingsView: View {
     @ObservedObject private var aiService = AIService.shared
@@ -16,6 +17,7 @@ struct AISettingsView: View {
     @State private var showingPrivacyInfo = false
     @State private var testStatus: TestStatus = .idle
     @State private var urlWarning: String? = nil
+    @State private var nonceData: NonceData?
 
     enum TestStatus {
         case idle, testing, success, failed(String)
@@ -35,6 +37,11 @@ struct AISettingsView: View {
         .sheet(isPresented: $showingPrivacyInfo) {
             aiPrivacySheet
         }
+        .task {
+            if !authManager.authState.isSignedIn {
+                await fetchNonce()
+            }
+        }
     }
 
     // MARK: - Account
@@ -45,11 +52,17 @@ struct AISettingsView: View {
             case .signedOut:
                 SignInWithAppleButton(.signIn) { request in
                     request.requestedScopes = [.email, .fullName]
+                    if let nonce = nonceData?.nonce {
+                        request.nonce = SHA256.hash(data: Data(nonce.utf8))
+                            .map { String(format: "%02x", $0) }
+                            .joined()
+                    }
                 } onCompletion: { result in
                     switch result {
                     case .success(let authorization):
                         if let credential = authorization.credential as? ASAuthorizationAppleIDCredential {
-                            Task { await authManager.handleAppleSignIn(credential: credential) }
+                            let nonce = self.nonceData
+                            Task { await authManager.handleAppleSignIn(credential: credential, nonceData: nonce) }
                         }
                     case .failure:
                         break
@@ -95,11 +108,17 @@ struct AISettingsView: View {
                         .foregroundStyle(.secondary)
                     SignInWithAppleButton(.signIn) { request in
                         request.requestedScopes = [.email, .fullName]
+                        if let nonce = nonceData?.nonce {
+                            request.nonce = SHA256.hash(data: Data(nonce.utf8))
+                                .map { String(format: "%02x", $0) }
+                                .joined()
+                        }
                     } onCompletion: { result in
                         switch result {
                         case .success(let authorization):
                             if let credential = authorization.credential as? ASAuthorizationAppleIDCredential {
-                                Task { await authManager.handleAppleSignIn(credential: credential) }
+                                let nonce = self.nonceData
+                                Task { await authManager.handleAppleSignIn(credential: credential, nonceData: nonce) }
                             }
                         case .failure: break
                         }
@@ -377,6 +396,16 @@ struct AISettingsView: View {
                 .padding(.top, 2)
             Text(text)
                 .font(.subheadline)
+        }
+    }
+
+    // MARK: - Nonce
+
+    private func fetchNonce() async {
+        do {
+            nonceData = try await authManager.fetchNonce()
+        } catch {
+            nonceData = nil
         }
     }
 

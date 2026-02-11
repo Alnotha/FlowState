@@ -2,10 +2,6 @@
 // Proxies requests to the Anthropic Claude API with Sign in with Apple auth
 // Secrets: ANTHROPIC_API_KEY, JWT_SECRET
 
-// TODO: Add nonce validation for production replay attack prevention.
-// The Apple identity token includes a nonce claim that should be validated
-// against a server-generated nonce to prevent token replay attacks.
-
 const ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages";
 const ANTHROPIC_VERSION = "2023-06-01";
 const APPLE_JWKS_URL = "https://appleid.apple.com/auth/keys";
@@ -96,6 +92,10 @@ export default {
     }
 
     // Route handling
+    if (url.pathname === "/auth/nonce" && request.method === "POST") {
+      return handleNonceGeneration(request, env);
+    }
+
     if (url.pathname === "/auth/apple" && request.method === "POST") {
       return handleAppleAuth(request, env);
     }
@@ -129,7 +129,7 @@ async function handleAppleAuth(request, env) {
     }
 
     const body = await request.json();
-    const { identityToken, userIdentifier } = body;
+    const { identityToken, userIdentifier, nonce: clientNonce, nonceSignature, nonceExpiresAt } = body;
 
     if (!identityToken || !userIdentifier) {
       return jsonResponse({ error: "Missing identityToken or userIdentifier" }, 400);
@@ -139,6 +139,35 @@ async function handleAppleAuth(request, env) {
     const applePayload = await verifyAppleToken(identityToken, APPLE_AUDIENCE);
     if (!applePayload) {
       return jsonResponse({ error: "Invalid Apple identity token" }, 401);
+    }
+
+    // Validate nonce for replay protection
+    if (clientNonce && nonceSignature && nonceExpiresAt) {
+      if (Date.now() > nonceExpiresAt) {
+        return jsonResponse({ error: "Nonce expired" }, 400);
+      }
+
+      const hmacKey = await crypto.subtle.importKey(
+        "raw",
+        new TextEncoder().encode(env.JWT_SECRET),
+        { name: "HMAC", hash: "SHA-256" },
+        false,
+        ["verify"]
+      );
+      const expectedPayload = `${clientNonce}:${nonceExpiresAt}`;
+      const expectedSig = base64UrlDecode(nonceSignature);
+      const nonceValid = await crypto.subtle.verify(
+        "HMAC", hmacKey, expectedSig, new TextEncoder().encode(expectedPayload)
+      );
+      if (!nonceValid) {
+        return jsonResponse({ error: "Invalid nonce" }, 400);
+      }
+
+      // Verify the Apple token contains the SHA256 hash of our nonce
+      const nonceHash = await sha256Hex(clientNonce);
+      if (applePayload.nonce !== nonceHash) {
+        return jsonResponse({ error: "Nonce mismatch" }, 401);
+      }
     }
 
     // Verify the subject matches
@@ -165,6 +194,33 @@ async function handleAppleAuth(request, env) {
     // Fix #6: Sanitize error messages - don't expose internal details
     return jsonResponse({ error: "Authentication failed" }, 500);
   }
+}
+
+// MARK: - Nonce Generation
+
+async function handleNonceGeneration(request, env) {
+  const clientIP = request.headers.get("CF-Connecting-IP") || "unknown";
+  if (isAuthRateLimited(clientIP, 10)) {
+    return jsonResponse({ error: "Rate limited" }, 429, { "Retry-After": "60" });
+  }
+
+  const nonceBytes = crypto.getRandomValues(new Uint8Array(32));
+  const nonce = base64UrlEncode(String.fromCharCode(...nonceBytes));
+  const expiresAt = Date.now() + 5 * 60 * 1000; // 5 minutes
+
+  // HMAC-sign the nonce so we can verify it later without storage
+  const hmacKey = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(env.JWT_SECRET),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"]
+  );
+  const payload = `${nonce}:${expiresAt}`;
+  const sig = await crypto.subtle.sign("HMAC", hmacKey, new TextEncoder().encode(payload));
+  const signature = base64UrlEncode(String.fromCharCode(...new Uint8Array(sig)));
+
+  return jsonResponse({ nonce, expiresAt, signature });
 }
 
 // MARK: - Token Refresh
@@ -436,6 +492,12 @@ async function verifyJWT(token, secret) {
 }
 
 // MARK: - Utilities
+
+async function sha256Hex(str) {
+  const data = new TextEncoder().encode(str);
+  const hash = await crypto.subtle.digest("SHA-256", data);
+  return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, "0")).join("");
+}
 
 function base64UrlEncode(str) {
   return btoa(str).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");

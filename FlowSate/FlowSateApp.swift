@@ -35,8 +35,12 @@ struct FlowSateApp: App {
                 return try ModelContainer(for: schema, configurations: [fallbackConfig])
             } catch {
                 // Last resort: in-memory only so the app doesn't crash
-                let memoryConfig = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
-                return try! ModelContainer(for: schema, configurations: [memoryConfig])
+                do {
+                    let memoryConfig = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+                    return try ModelContainer(for: schema, configurations: [memoryConfig])
+                } catch {
+                    fatalError("FlowState could not create any data store: \(error.localizedDescription)")
+                }
             }
         }
     }()
