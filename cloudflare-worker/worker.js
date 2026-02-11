@@ -141,33 +141,35 @@ async function handleAppleAuth(request, env) {
       return jsonResponse({ error: "Invalid Apple identity token" }, 401);
     }
 
-    // Validate nonce for replay protection
-    if (clientNonce && nonceSignature && nonceExpiresAt) {
-      if (Date.now() > nonceExpiresAt) {
-        return jsonResponse({ error: "Nonce expired" }, 400);
-      }
+    // Require nonce for replay protection
+    if (!clientNonce || !nonceSignature || !nonceExpiresAt) {
+      return jsonResponse({ error: "Missing nonce parameters" }, 400);
+    }
 
-      const hmacKey = await crypto.subtle.importKey(
-        "raw",
-        new TextEncoder().encode(env.JWT_SECRET),
-        { name: "HMAC", hash: "SHA-256" },
-        false,
-        ["verify"]
-      );
-      const expectedPayload = `${clientNonce}:${nonceExpiresAt}`;
-      const expectedSig = base64UrlDecode(nonceSignature);
-      const nonceValid = await crypto.subtle.verify(
-        "HMAC", hmacKey, expectedSig, new TextEncoder().encode(expectedPayload)
-      );
-      if (!nonceValid) {
-        return jsonResponse({ error: "Invalid nonce" }, 400);
-      }
+    if (Date.now() > nonceExpiresAt) {
+      return jsonResponse({ error: "Nonce expired" }, 400);
+    }
 
-      // Verify the Apple token contains the SHA256 hash of our nonce
-      const nonceHash = await sha256Hex(clientNonce);
-      if (applePayload.nonce !== nonceHash) {
-        return jsonResponse({ error: "Nonce mismatch" }, 401);
-      }
+    const hmacKey = await crypto.subtle.importKey(
+      "raw",
+      new TextEncoder().encode(env.JWT_SECRET),
+      { name: "HMAC", hash: "SHA-256" },
+      false,
+      ["verify"]
+    );
+    const expectedPayload = `${clientNonce}:${nonceExpiresAt}`;
+    const expectedSig = base64UrlDecode(nonceSignature);
+    const nonceValid = await crypto.subtle.verify(
+      "HMAC", hmacKey, expectedSig, new TextEncoder().encode(expectedPayload)
+    );
+    if (!nonceValid) {
+      return jsonResponse({ error: "Invalid nonce" }, 400);
+    }
+
+    // Verify the Apple token contains the SHA256 hash of our nonce
+    const nonceHash = await sha256Hex(clientNonce);
+    if (applePayload.nonce !== nonceHash) {
+      return jsonResponse({ error: "Nonce mismatch" }, 401);
     }
 
     // Verify the subject matches
@@ -415,7 +417,11 @@ async function verifyAppleToken(tokenString, expectedAudience) {
     if (payload.iss !== APPLE_ISSUER) return null;
 
     // Check expiration
-    if (payload.exp < Math.floor(Date.now() / 1000)) return null;
+    const now = Math.floor(Date.now() / 1000);
+    if (payload.exp < now) return null;
+
+    // Reject tokens issued more than 10 minutes ago
+    if (payload.iat && payload.iat < (now - 600)) return null;
 
     // Fix #9: Verify audience inside verifyAppleToken
     if (payload.aud !== expectedAudience) return null;

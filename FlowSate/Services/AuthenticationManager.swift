@@ -76,8 +76,6 @@ final class AuthenticationManager: ObservableObject {
         let request = AppleAuthRequest(
             identityToken: identityToken,
             userIdentifier: credential.user,
-            email: credential.email,
-            fullName: fullName.isEmpty ? nil : fullName,
             nonce: nonceData?.nonce,
             nonceSignature: nonceData?.signature,
             nonceExpiresAt: nonceData?.expiresAt
@@ -215,7 +213,6 @@ final class AuthenticationManager: ObservableObject {
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
             request.setValue("alnotha.FlowSate", forHTTPHeaderField: "X-App-Bundle")
             request.setValue("Bearer \(jwt)", forHTTPHeaderField: "Authorization")
-            request.httpBody = try JSONEncoder().encode(AuthRefreshRequest(token: jwt))
 
             let (data, response) = try await URLSession.shared.data(for: request)
             guard let httpResponse = response as? HTTPURLResponse else { return false }
