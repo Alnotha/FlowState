@@ -157,6 +157,10 @@ struct StreakCardView: View {
                 .accessibilityElement(children: .combine)
                 .accessibilityLabel("Longest streak: \(longestStreak) days")
             }
+
+            Divider()
+
+            MonthCalendarView(entries: entries)
         }
         .padding()
         .background(Color(.systemBackground))
@@ -216,6 +220,151 @@ private struct WeekDotRow: View {
                 .accessibilityElement(children: .combine)
                 .accessibilityLabel("\(day.label), \(day.journaled ? "journaled" : "no entry")")
             }
+        }
+    }
+}
+
+// MARK: - MonthCalendarView
+
+private struct MonthCalendarView: View {
+    let entries: [JournalEntry]
+
+    private let calendar = Calendar.current
+    private let columns = Array(repeating: GridItem(.flexible(), spacing: 4), count: 7)
+    private let weekdaySymbols = Calendar.current.veryShortWeekdaySymbols
+
+    private var currentMonth: Date {
+        calendar.date(from: calendar.dateComponents([.year, .month], from: Date())) ?? Date()
+    }
+
+    private var monthName: String {
+        currentMonth.formatted(.dateTime.month(.wide))
+    }
+
+    private var daysInMonth: [CalendarDay] {
+        guard let range = calendar.range(of: .day, in: .month, for: currentMonth),
+              let firstDay = calendar.date(from: calendar.dateComponents([.year, .month], from: currentMonth))
+        else { return [] }
+
+        let firstWeekday = calendar.component(.weekday, from: firstDay)
+        let offset = firstWeekday - calendar.firstWeekday
+        let leadingEmpty = offset < 0 ? offset + 7 : offset
+
+        let journaledDays: Set<Date> = Set(
+            entries
+                .filter { !$0.content.isEmpty }
+                .map { calendar.startOfDay(for: $0.date) }
+        )
+
+        let today = calendar.startOfDay(for: Date())
+
+        var days: [CalendarDay] = []
+
+        // Leading empty cells
+        for _ in 0..<leadingEmpty {
+            days.append(CalendarDay(dayNumber: nil, isJournaled: false, isToday: false, isFuture: false))
+        }
+
+        // Actual days
+        for day in range {
+            guard let date = calendar.date(byAdding: .day, value: day - 1, to: firstDay) else { continue }
+            let startOfDate = calendar.startOfDay(for: date)
+            let isJournaled = journaledDays.contains(startOfDate)
+            let isToday = calendar.isDateInToday(date)
+            let isFuture = startOfDate > today
+
+            days.append(CalendarDay(dayNumber: day, isJournaled: isJournaled, isToday: isToday, isFuture: isFuture))
+        }
+
+        return days
+    }
+
+    private var journaledCount: Int {
+        StreakManager.thisMonthCount(from: entries)
+    }
+
+    var body: some View {
+        VStack(spacing: 12) {
+            HStack {
+                Text(monthName)
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+
+                Spacer()
+
+                Text("\(journaledCount) days")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            // Weekday headers
+            LazyVGrid(columns: columns, spacing: 4) {
+                ForEach(weekdaySymbols, id: \.self) { symbol in
+                    Text(symbol)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity)
+                }
+            }
+
+            // Calendar grid
+            LazyVGrid(columns: columns, spacing: 6) {
+                ForEach(Array(daysInMonth.enumerated()), id: \.offset) { _, day in
+                    CalendarDayCell(day: day)
+                }
+            }
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(monthName) overview: \(journaledCount) days journaled")
+    }
+}
+
+private struct CalendarDay {
+    let dayNumber: Int?
+    let isJournaled: Bool
+    let isToday: Bool
+    let isFuture: Bool
+}
+
+private struct CalendarDayCell: View {
+    let day: CalendarDay
+
+    var body: some View {
+        Group {
+            if let number = day.dayNumber {
+                Text("\(number)")
+                    .font(.caption)
+                    .fontWeight(day.isToday ? .bold : .regular)
+                    .foregroundStyle(foregroundColor)
+                    .frame(width: 28, height: 28)
+                    .background(backgroundColor)
+                    .clipShape(Circle())
+                    .overlay(
+                        Circle()
+                            .strokeBorder(day.isToday ? Color.blue : Color.clear, lineWidth: 2)
+                    )
+            } else {
+                Color.clear
+                    .frame(width: 28, height: 28)
+            }
+        }
+    }
+
+    private var foregroundColor: Color {
+        if day.isFuture {
+            return .secondary.opacity(0.4)
+        } else if day.isJournaled {
+            return .white
+        } else {
+            return .primary
+        }
+    }
+
+    private var backgroundColor: Color {
+        if day.isJournaled {
+            return .orange
+        } else {
+            return .clear
         }
     }
 }
