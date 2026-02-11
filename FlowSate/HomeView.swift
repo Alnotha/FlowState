@@ -170,11 +170,7 @@ struct HomeView: View {
                     }
                 }
             }
-            .sheet(isPresented: $showingEditor, onDismiss: {
-                if let entry = todayEntry, entry.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    modelContext.delete(entry)
-                }
-            }) {
+            .sheet(isPresented: $showingEditor, onDismiss: cleanupEmptyEntry) {
                 if let entry = todayEntry {
                     NavigationStack {
                         JournalEditorView(entry: entry)
@@ -219,6 +215,16 @@ struct HomeView: View {
         case 0..<12: return "Good Morning\(nameSuffix)"
         case 12..<17: return "Good Afternoon\(nameSuffix)"
         default: return "Good Evening\(nameSuffix)"
+        }
+    }
+
+    private func cleanupEmptyEntry() {
+        guard let entry = todayEntry else { return }
+        let hasContent = !entry.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        let hasMood = entry.mood != nil
+        let hasPhotos = !(entry.photoData ?? []).isEmpty
+        if !hasContent && !hasMood && !hasPhotos {
+            modelContext.delete(entry)
         }
     }
 
