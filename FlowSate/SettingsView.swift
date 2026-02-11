@@ -12,10 +12,12 @@ struct SettingsView: View {
     @ObservedObject private var notificationManager = NotificationManager.shared
     @ObservedObject private var authManager = AuthenticationManager.shared
     @AppStorage("appColorScheme") private var appColorScheme: String = "system"
+    @AppStorage("userName") private var userName: String = ""
     @State private var showingExportAlert = false
 
     var body: some View {
         List {
+            profileSection
             accountSection
             notificationsSection
             aiSection
@@ -26,6 +28,20 @@ struct SettingsView: View {
         .listStyle(.insetGrouped)
         .navigationTitle("Settings")
         .navigationBarTitleDisplayMode(.large)
+    }
+
+    private var profileSection: some View {
+        Section {
+            HStack {
+                Label("Display Name", systemImage: "person.fill")
+                TextField("Your name", text: $userName)
+                    .multilineTextAlignment(.trailing)
+            }
+        } header: {
+            Text("Profile")
+        } footer: {
+            Text("Used for the home screen greeting.")
+        }
     }
 
     private var accountSection: some View {
