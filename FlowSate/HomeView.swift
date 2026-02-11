@@ -16,6 +16,7 @@ struct HomeView: View {
     @State private var showingChat = false
     @State private var nudge: EmotionalNudge?
     @State private var showNudge = true
+    @AppStorage("userName") private var userName: String = ""
 
     private var todayEntry: JournalEntry? {
         entries.first { Calendar.current.isDateInToday($0.date) }
@@ -190,10 +191,11 @@ struct HomeView: View {
 
     private var greetingText: String {
         let hour = Calendar.current.component(.hour, from: Date())
+        let nameSuffix = userName.isEmpty ? "" : ", \(userName)"
         switch hour {
-        case 0..<12: return "Good Morning"
-        case 12..<17: return "Good Afternoon"
-        default: return "Good Evening"
+        case 0..<12: return "Good Morning\(nameSuffix)"
+        case 12..<17: return "Good Afternoon\(nameSuffix)"
+        default: return "Good Evening\(nameSuffix)"
         }
     }
 
